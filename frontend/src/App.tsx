@@ -1,5 +1,5 @@
 // frontend/src/App.tsx
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 type MsgType =
@@ -25,7 +25,6 @@ type ServerEvent =
   | { type: "game_state_update"; game_state: SharedGameState }
   | { type: "get_hand"; hand: string[] }
   | { type: "your_turn_now" }
-  | { type: string;[key: string]: any };
 
 interface PlayerShared {
   username: string;
@@ -60,7 +59,8 @@ function App() {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    ws.current = new WebSocket("ws://localhost:8000/ws");
+    const WSURL = import.meta.env.VITE_WS_URL
+    ws.current = new WebSocket(WSURL);
     ws.current.onopen = () => { send({ type: "join", username }); };
     ws.current.onclose = () => { setMessages((prev) => [...prev, "🔌 Disconnected"]); };
     return () => { ws.current?.close(); };
@@ -75,21 +75,17 @@ function App() {
       try {
         const msg: ServerEvent = JSON.parse(raw);
         switch (msg.type) {
-          case "new_round":
-            setHand(Array.isArray((msg as any).hand) ? (msg as any).hand : []);
-            setMessages([`🃏 You were dealt: ${((msg as any).hand || []).join(", ")}`]);
-            break;
           case "game_state_update":
-            setSharedGameState((msg as any).game_state as SharedGameState);
+            setSharedGameState(msg.game_state as SharedGameState);
             break;
           case "get_hand":
-            setHand((msg as any).hand ?? []);
+            setHand(msg.hand ?? []);
             break;
           case "chat":
           case "system":
           case "info":
           case "error":
-            setMessages((prev) => [...prev, (msg as any).message]);
+            setMessages((prev) => [...prev, msg.message]);
             break;
           default:
             setMessages((prev) => [...prev, `${JSON.stringify(msg)}`]);
@@ -238,7 +234,7 @@ function App() {
 
           {/* Bottom-left controls */}
           <div className="controls">
-            {getMyPlayerObject().your_turn && (
+            {getMyPlayerObject()?.your_turn && (
               <div className="actions">
                 <button onClick={fold}>Fold</button>
                 <button onClick={checkOrCall}>
