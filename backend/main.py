@@ -1,12 +1,13 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
-import time
 from typing import List
 import json
 from deck_of_cards import DeckOfCards
 from phevaluator.evaluator import evaluate_cards
+from helpers import getPlayerFromWebsocket
 
 app = FastAPI()
+
 
 class ConnectionManager:
 
@@ -19,17 +20,18 @@ class ConnectionManager:
         await manager.send_game_state_to_all()
 
     async def send_game_state_to_all(self):
-        await manager.send_to_all({"type" : "game_state_update" , "game_state": GAME._get_shared_state()})
+        await manager.send_to_all(
+            {"type": "game_state_update", "game_state": GAME._get_shared_state()}
+        )
 
     def get_username(self, websocket: WebSocket) -> str:
         for player in GAME.players:
             if websocket == player.websocket:
-                return player.username 
+                return player.username
         return "Not found"
 
     async def disconnect(self, websocket: WebSocket) -> None:
-        global HOST
-        
+
         for i, player in enumerate(GAME.players):
             if player.websocket == websocket:
                 GAME.players.pop(i)
@@ -55,14 +57,14 @@ class GameState:
         self.deck = DeckOfCards()
         self.deck.shuffle()
         self.pot = 0
-        self.players : List[Player] = []
-        self.board: List[str]= []
+        self.players: List[Player] = []
+        self.board: List[str] = []
         self.dealer_index = 0
         self.small_blind = 5
         self.big_blind = 10
         self.started = False
         self.current_player_index = 0
-        self.people_in_hand : List[Player] = []
+        self.people_in_hand: List[Player] = []
         self.last_raise = 0
         self.threshold = 0
 
@@ -79,14 +81,16 @@ class GameState:
         # draw cards
         for player in self.players:
             if player.isActive:
-                active_player_count+=1
+                active_player_count += 1
                 player.isInHand = True
                 player.hand = [self.deck.draw(), self.deck.draw()]
-                await manager.send_to_one(player.websocket, {"type": "get_hand", "hand" : player.hand})
-        
+                await manager.send_to_one(
+                    player.websocket, {"type": "get_hand", "hand": player.hand}
+                )
+
         if active_player_count == 0:
             return
-        
+
         # increment the dealer between hands
         self.dealer_index = (self.dealer_index + 1) % active_player_count
         while not self.players[self.dealer_index].isActive:
@@ -103,9 +107,9 @@ class GameState:
 
         print("starting new betting rotation")
         self.people_in_hand = [p for p in self.players if p.isInHand]
-        self.people_in_hand.sort(key= lambda x: x.position)
+        self.people_in_hand.sort(key=lambda x: x.position)
 
-        if len(self.board) == 5 or len(self.people_in_hand) <= 1: 
+        if len(self.board) == 5 or len(self.people_in_hand) <= 1:
             await self.end_round()
             return
 
@@ -114,21 +118,28 @@ class GameState:
             p.money_commited_this_round = 0
             p.ready_to_see_next_round = False
             p.your_turn = False
-        
+
         # allow the small and big blind to go last
         if preflop:
             self.current_player_index = 2
             self.threshold = self.big_blind
-            self.people_in_hand[(self.current_player_index) % len(self.people_in_hand)].money_commited_this_round  = self.small_blind
-            self.people_in_hand[(self.current_player_index+1) % len(self.people_in_hand)].money_commited_this_round  = self.big_blind
+            self.people_in_hand[
+                (self.current_player_index) % len(self.people_in_hand)
+            ].money_commited_this_round = self.small_blind
+            self.people_in_hand[
+                (self.current_player_index + 1) % len(self.people_in_hand)
+            ].money_commited_this_round = self.big_blind
             self.pot = self.big_blind + self.small_blind
         else:
-           self.current_player_index = 0
-           self.board.append(self.deck.draw())
-           self.threshold = 0
+            if len(self.board) == 0:
+                self.board = [self.deck.draw() for _ in range(3)]
+            else:
+                self.board.append(self.deck.draw())
+            self.current_player_index = 0
+            self.threshold = 0
 
         self.current_player_index %= len(self.people_in_hand)
-        
+
         await self.allow_to_raise()
 
     def _get_shared_state(self):
@@ -137,50 +148,58 @@ class GameState:
             "pot": self.pot,
             "big_blind": self.big_blind,
             "small_blind": self.small_blind,
-            "board": self.board,                          
+            "board": self.board,
             "players": [p.get_shared_payload() for p in self.players],
             "threshold": self.threshold,
             "last_raise": self.last_raise,
             "started": self.started,
         }
-    
-    async def allow_to_raise(self):
-        self.people_in_hand[self.current_player_index % len(self.people_in_hand)].your_turn = True
 
-    async def set_blind(self, player, amount):
-        await manager.send_to_one(player.websocket, {"type": "set_blind", "amount": amount})
+    async def allow_to_raise(self):
+        self.people_in_hand[
+            self.current_player_index % len(self.people_in_hand)
+        ].your_turn = True
+
+    async def set_blind(self, player, amount: int):
+        await manager.send_to_one(
+            player.websocket, {"type": "set_blind", "amount": amount}
+        )
 
     async def end_round(self):
-        
+
         live_players = [p for p in self.players if p.isInHand]
 
         # didnt' get the river
         if len(live_players) == 1:
-            pot_winner = live_players[0]  # compare by the evaluate_cards score )[1]  # get the player
+            pot_winner = live_players[
+                0
+            ]  # compare by the evaluate_cards score )[1]  # get the player
         else:
             # minimum hand ranking takes it
-            ranks = [(evaluate_cards(*(self.board+p.hand)), p) for p in live_players]
-            pot_winner = min(ranks, key=lambda x: x[0])[1]  # compare by the evaluate_cards score )[1]  # get the player
-        
-        #TODO: implement chopped pots
+            ranks = [(evaluate_cards(*(self.board + p.hand)), p) for p in live_players]
+            pot_winner = min(ranks, key=lambda x: x[0])[
+                1
+            ]  # compare by the evaluate_cards score )[1]  # get the player
+
+        # TODO: implement chopped pots
         await manager.send_to_all(f"{pot_winner.username} wins the pot")
-        pot_winner.stack_size+=GAME.pot
+        pot_winner.stack_size += GAME.pot
 
         await self.restart_round()
 
-            
 class Player:
-    def __init__(self, websocket: WebSocket, username : str):
-        self.username = username
-        self.isActive = True
-        self.isInHand = False
-        self.stack_size = 0
-        self.hand : List[str] = []
+
+    def __init__(self, websocket: WebSocket, username: str):
+        self.username: str = username
+        self.isActive: bool = True
+        self.isInHand: bool = False
+        self.stack_size: int = 0
+        self.hand: List[str] = []
         self.websocket = websocket
         self.position = 0
         self.ready_to_see_next_round = False
-        self.money_commited_this_round = 0
-        self.your_turn = False
+        self.money_commited_this_round: int = 0
+        self.your_turn: bool = False
 
     def get_shared_payload(self):
         return {
@@ -189,8 +208,9 @@ class Player:
             "isInHand": self.isInHand,
             "stack_size": self.stack_size,
             "money_commited_this_round": self.money_commited_this_round,
-            "your_turn": self.your_turn
+            "your_turn": self.your_turn,
         }
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -204,13 +224,13 @@ async def websocket_endpoint(websocket: WebSocket):
             await manager.disconnect(websocket)
             break
         except RuntimeError as e:
-            print('That brother is already disconnecting.. chill...')
+            print("That brother is already disconnecting.. chill...")
             print(e)
             break
 
         data = json.loads(data_str)
 
-        print('received', data)
+        print("received", data)
         msg_type = data.get("type")
 
         match msg_type:
@@ -232,28 +252,41 @@ async def websocket_endpoint(websocket: WebSocket):
                 username = manager.get_username(websocket)
                 await manager.send_to_all(f"{username}: puts in {raise_amount}")
 
+                current_player = GAME.people_in_hand[GAME.current_player_index]
+
+                if current_player.websocket != websocket:
+                    raise RuntimeWarning(
+                        f"current turn player unclear - please debug: "
+                        f"current_player.websocket={current_player.websocket}, websocket={websocket}"
+                    )
+
                 # new raiser, everyone else needs to check as well
                 if raise_amount > GAME.threshold:
                     for p in GAME.people_in_hand:
                         p.ready_to_see_next_round = False
                     GAME.last_raise = raise_amount - GAME.threshold
                     GAME.threshold = raise_amount
-                
-                GAME.pot+= raise_amount - GAME.people_in_hand[GAME.current_player_index].money_commited_this_round 
-                GAME.people_in_hand[GAME.current_player_index].money_commited_this_round = raise_amount
-                GAME.people_in_hand[GAME.current_player_index].ready_to_see_next_round = True
-                GAME.people_in_hand[GAME.current_player_index].your_turn = False
+
+                money_put_in = raise_amount - current_player.money_commited_this_round
+                GAME.pot += money_put_in
+                current_player.money_commited_this_round += money_put_in
+                current_player.stack_size -= money_put_in
+                current_player.ready_to_see_next_round = True
+                current_player.your_turn = False
 
                 if all(p.ready_to_see_next_round for p in GAME.people_in_hand):
                     await GAME.start_round(False)
                 else:
                     # let the next person bet
-                    GAME.current_player_index = (GAME.current_player_index+ 1) % len(GAME.people_in_hand)
+                    GAME.current_player_index = (GAME.current_player_index + 1) % len(
+                        GAME.people_in_hand
+                    )
                     GAME.people_in_hand[GAME.current_player_index].your_turn = True
 
-
             case "fold":
-                GAME.people_in_hand[GAME.current_player_index].ready_to_see_next_round = True
+                GAME.people_in_hand[
+                    GAME.current_player_index
+                ].ready_to_see_next_round = True
                 GAME.people_in_hand[GAME.current_player_index].isInHand = False
 
                 # there's a chance you fold and it automatically ends
@@ -264,8 +297,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         await GAME.start_round(False)
                     else:
                         # let the next person bet
-                        GAME.current_player_index = (GAME.current_player_index+ 1) % len(GAME.people_in_hand)
+                        GAME.current_player_index = (
+                            GAME.current_player_index + 1
+                        ) % len(GAME.people_in_hand)
                         GAME.people_in_hand[GAME.current_player_index].your_turn = True
+
+            case "set_stack":
+                stack_amount = data.get("amount")
+                getPlayerFromWebsocket(websocket, GAME).stack_size = stack_amount
 
             case _:
                 await manager.send_to_one(
@@ -274,6 +313,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
         await manager.send_game_state_to_all()
 
+
 manager = ConnectionManager()
 GAME = GameState()
-    
