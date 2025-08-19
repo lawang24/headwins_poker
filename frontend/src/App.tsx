@@ -9,9 +9,10 @@ type MsgType =
   | "start_game"
   | "fold"
   | "check_call"
-  | "commit_money";
+  | "commit_money"
+  | "set_stack";
 
-interface ChatMessage {
+interface WebsocketMessage {
   type: MsgType;
   username?: string;
   text?: string;
@@ -55,6 +56,7 @@ function App() {
   const [input, setInput] = useState("");
   const [raiseAmt, setRaiseAmt] = useState<string>("");
   const [sharedGameState, setSharedGameState] = useState<SharedGameState | null>(null);
+  const [newStackAmount, setNewStackAmount] = useState<string>("");
 
   const ws = useRef<WebSocket | null>(null);
 
@@ -97,7 +99,7 @@ function App() {
     };
   }, []);
 
-  const send = (msg: ChatMessage) => {
+  const send = (msg: WebsocketMessage) => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify(msg));
     }
@@ -115,11 +117,12 @@ function App() {
     if (!sharedGameState) return;
     send({ type: "commit_money", amount: sharedGameState.threshold });
   };
+
   const raise = () => {
     if (!sharedGameState) return;
     const me = getMyPlayerObject();
     const amt = Number(raiseAmt);
-    if (!Number.isFinite(amt) || amt <= 0) {
+    if (!Number.isFinite(amt) || amt <= 0 || (!me) || amt > me.stack_size) {
       setMessages((prev) => [...prev, "⚠️ Enter a valid positive raise amount"]);
       return;
     }
@@ -160,7 +163,7 @@ function App() {
       <h1 className="title">Headwins Poker</h1>
 
       {!sharedGameState ? (
-        <div className="waiting">Waiting for game state...</div>
+        <div className="waiting">Waiting for server startup... (approx a minute) </div>
       ) : (
         <>
           {/* Centered, scalable table */}
@@ -251,11 +254,23 @@ function App() {
                 <button onClick={raise}>Raise</button>
               </div>
             )}
+
             <div className="misc">
-              {
-                // !sharedGameState.started &&
                 <button onClick={startGame}>Restart Game</button>
-              }
+                
+                <input
+                  type="number"
+                  min="1"
+                  step=".01"
+                  value={newStackAmount}
+                  onChange={(e) => setNewStackAmount(e.target.value)}
+                  placeholder="Set stack amount"
+                />
+                <button onClick={()=>{
+                  send({type: "set_stack", amount: Number(newStackAmount)})
+                }}> Set Stack Amount </button>
+
+                
               <div className="whoami">Connected as <b>{username}</b></div>
             </div>
           </div>
