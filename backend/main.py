@@ -37,7 +37,12 @@ class GameServer:
             raise StorageError("Storage unavailable; restart the backend to recover.")
         if self.store:
             try:
-                await asyncio.to_thread(self.store.save, snapshot(self.table))
+                await asyncio.to_thread(
+                    self.store.save,
+                    snapshot(self.table),
+                    self.table.events,
+                    self.table.profiles,
+                )
             except Exception as exc:
                 self.failed = True
                 logging.error(
@@ -49,6 +54,27 @@ class GameServer:
                 raise StorageError(
                     "Storage unavailable; restart the backend to recover."
                 ) from exc
+
+        self.table.events.clear()
+        self.table.profiles.clear()
+
+    async def join(self, name, token):
+        profile = None
+        if token is not None and (not isinstance(token, str) or len(token) > 128):
+            raise InvalidAction("Invalid player identity.")
+        if (
+            token
+            and self.store
+            and not any(p.token == token for p in self.table.players)
+        ):
+            try:
+                profile = await asyncio.to_thread(self.store.identity, token)
+            except Exception as exc:
+                # Do not silently assign a different lifetime identity on a read failure.
+                raise StorageError(
+                    "Player history unavailable; reconnect to retry."
+                ) from exc
+        return self.table.join(name, token, profile)
 
     @staticmethod
     async def close(socket, code=1000):
@@ -138,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if kind == "join":
                         if player:
                             raise InvalidAction("You have already joined.")
-                        player = server.table.join(data.get("name"), data.get("token"))
+                        player = await server.join(data.get("name"), data.get("token"))
                         old = server.sockets.get(player.id)
                         server.sockets[player.id] = websocket
                         await server.checkpoint()
@@ -162,7 +188,9 @@ async def websocket_endpoint(websocket: WebSocket):
                             or not 1 <= len(message.strip()) <= 300
                         ):
                             raise InvalidAction("Chat must contain 1–300 characters.")
-                        server.table.log(f"{player.name}: {message.strip()}")
+                        server.table.log(
+                            f"{player.name}: {message.strip()}", player_id=player.id
+                        )
                     else:
                         raise InvalidAction("Unknown message type.")
                 except (InvalidAction, json.JSONDecodeError) as exc:
@@ -175,7 +203,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         }
                     )
                 await server.broadcast()
-    except (WebSocketDisconnect, RuntimeError, OSError, StorageError):
+    except StorageError:
+        await server.close(websocket, code=1011)
+    except (WebSocketDisconnect, RuntimeError, OSError):
         pass
     finally:
         async with server.lock:

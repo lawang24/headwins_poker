@@ -8,7 +8,7 @@ const sessionKey = "headwins:global";
 
 export default function App() {
   const [name, setName] = useState(
-    sessionStorage.getItem(`${sessionKey}:name`) || "",
+    sessionStorage.getItem(`${sessionKey}:name`) || localStorage.getItem(`${sessionKey}:name`) || "",
   );
   const [joined, setJoined] = useState(
     Boolean(sessionStorage.getItem(`${sessionKey}:token`)),
@@ -48,8 +48,8 @@ export default function App() {
         socket.send(
           JSON.stringify({
             type: "join",
-            name: sessionStorage.getItem(`${sessionKey}:name`) || "Player",
-            token: sessionStorage.getItem(`${sessionKey}:token`),
+            name: sessionStorage.getItem(`${sessionKey}:name`) || localStorage.getItem(`${sessionKey}:name`) || "Player",
+            token: sessionStorage.getItem(`${sessionKey}:token`) || localStorage.getItem(`${sessionKey}:token`),
           }),
         );
       };
@@ -57,8 +57,10 @@ export default function App() {
         if (stopped) return;
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === "session")
+          if (msg.type === "session") {
             sessionStorage.setItem(`${sessionKey}:token`, msg.token);
+            localStorage.setItem(`${sessionKey}:token`, msg.token);
+          }
           if (msg.type === "state") {
             setState(msg.state);
             setPending(false);
@@ -177,6 +179,7 @@ export default function App() {
               e.preventDefault();
               if (!name.trim()) return;
               sessionStorage.setItem(`${sessionKey}:name`, name.trim());
+              localStorage.setItem(`${sessionKey}:name`, name.trim());
               setJoined(true);
             }}
           >

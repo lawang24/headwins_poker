@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Headwins Poker durable game storage with fixed free-tier-sized provisioned capacity.
+Description: Headwins Poker checkpoints and permanent poker history with fixed provisioned capacity.
 Metadata:
   AWSToolsMetrics:
     AWSAgentToolkit: aws-cloudformation@2
@@ -22,7 +22,7 @@ Resources:
       TableClass: STANDARD
       ProvisionedThroughput:
         ReadCapacityUnits: 5
-        WriteCapacityUnits: 25
+        WriteCapacityUnits: 5
       AttributeDefinitions:
         - AttributeName: pk
           AttributeType: S
@@ -36,7 +36,48 @@ Resources:
       Tags:
         - Key: Project
           Value: headwins-poker
+  HistoryTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Permanent private events and player results grow independently of the recovery checkpoint.
+        must:
+          - Commit history and checkpoints together through DynamoDB transactions.
+          - Only backend and authorized offline analysis may read private cards.
+          - Retain history indefinitely without TTL; preserve fixed capacity without autoscaling.
+        gaps: Paid point-in-time recovery is disabled to preserve the existing budget-conscious setup.
+    Properties:
+      TableName: !Sub '${AWS::StackName}-history'
+      BillingMode: PROVISIONED
+      TableClass: STANDARD
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 20
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      DeletionProtectionEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      Tags:
+        - Key: Project
+          Value: headwins-poker
 Outputs:
+  HistoryTableName:
+    Description: Backend DYNAMODB_HISTORY_TABLE setting
+    Value: !Ref HistoryTable
+  HistoryTableArn:
+    Description: Scope backend history GetItem and PutItem and offline Query permissions to this ARN
+    Value: !GetAtt HistoryTable.Arn
   TableName:
     Description: Backend DYNAMODB_TABLE setting
     Value: !Ref GameTable

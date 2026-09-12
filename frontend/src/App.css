@@ -240,16 +240,29 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
 .action-controls { display: flex; align-items: center; gap: 24px; padding: 16px 18px; background: #202020ed; border: 1px solid #393939; border-radius: 5px; }
 .action-status { width: 170px; flex-shrink: 0; font-size: 14px; font-weight: 600; color: #eee; }
 .action-status span { display: block; color: #aaa; font-size: 11px; font-weight: 400; margin-top: 5px; }
-.betting-controls { flex: 1; min-width: 0; }
-.primary-actions { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 8px; }
-.primary-actions button { min-height: 44px; text-transform: uppercase; font-size: 12px; letter-spacing: .4px; }
-.primary-actions .fold-action { background: #414141; }
-.primary-actions .raise-action { background: #8b9545; color: white; border-color: #8b9545; }
-.raise-editor { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
-.raise-amount { display: flex; flex-direction: row; align-items: center; font-size: 11px; white-space: nowrap; gap: 8px; }
-.raise-amount input { width: 92px; padding: 6px 8px; }
-.raise-slider { flex: 1; min-width: 50px; accent-color: #8b9545; padding: 0; height: 24px; background: transparent; border: 0; }
-.all-in-action { padding: 8px 12px; font-size: 11px; min-height: 38px; }
+.action-controls.is-playing { flex-direction: column; align-items: flex-end; justify-content: flex-end; gap: 8px; min-height: 110px; padding: 12px 0; background: transparent; border: 0; box-shadow: none; }
+.is-playing .action-status { width: auto; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.is-your-turn .action-status { color: #d5dd6c; }
+.is-playing .action-status span { text-transform: none; letter-spacing: 0; }
+.betting-controls { width: min(100%, 460px); min-width: 0; }
+.primary-actions { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 6px; }
+.primary-actions button, .raise-confirmation button { min-height: 54px; padding: 10px 8px; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; font-weight: 500; border-radius: 3px; background: #2228; border: 1px solid #88b954; color: #a7d571; }
+.primary-actions button small { display: block; font-size: 9px; letter-spacing: .5px; }
+.primary-actions .fold-action { color: #e29a78; border-color: #bd7254; }
+.primary-actions button:hover:not(:disabled), .raise-confirmation .confirm-action:hover:not(:disabled) { background: #88b95426; }
+.primary-actions .fold-action:hover:not(:disabled) { background: #bd725426; }
+.primary-actions button:disabled { opacity: .3; }
+.raise-editor { padding: 14px; background: #202020; border: 1px solid #45483b; border-radius: 4px; }
+.raise-sizing { display: flex; align-items: center; gap: 16px; }
+.raise-amount { display: flex; flex-direction: row; align-items: center; font-size: 12px; white-space: nowrap; gap: 8px; }
+.raise-amount input { width: 100px; padding: 8px; font-size: 16px; min-height: 44px; }
+.raise-slider { flex: 1; min-width: 40px; accent-color: #a7d571; padding: 0; height: 44px; background: transparent; border: 0; }
+.bet-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.bet-presets button { padding: 8px 4px; min-height: 44px; font-size: 12px; font-weight: 500; border-color: #555; background: transparent; }
+.bet-presets button:hover:not(:disabled) { background: #ffffff0d; }
+.raise-help { margin: 10px 0; font-size: 11px; color: #bbb; }
+.raise-confirmation { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.raise-confirmation .cancel-action { color: #ccc; border-color: #666; }
 .between-controls { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex: 1; }
 .stack-editor { display: flex; gap: 8px; align-items: end; }
 .stack-editor label { font-size: 10px; gap: 2px; }
@@ -325,13 +338,13 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
   .action-controls { position: relative; z-index: 5; display: block; padding: 10px; box-shadow: 0 -5px 18px #0003; }
   .action-status { width: auto; display: flex; justify-content: space-between; gap: 10px; font-size: 11px; margin-bottom: 8px; }
   .action-status span { font-size: 9px; margin: 0; text-align: right; }
-  .primary-actions { gap: 5px; }
-  .primary-actions button { font-size: 10px; padding: 8px 4px; letter-spacing: 0; }
-  .raise-editor { gap: 8px; margin-top: 8px; }
-  .raise-amount { font-size: 10px; gap: 5px; }
-  .raise-amount input { width: 66px; min-height: 44px; font-size: 16px; }
-  .raise-slider { min-height: 44px; }
-  .all-in-action { min-height: 44px; padding: 5px 9px; }
+  .is-playing .action-status { display: block; margin-bottom: 0; }
+  .is-playing .action-status span { margin-top: 4px; }
+  .primary-actions button { font-size: 11px; letter-spacing: .5px; padding: 8px 4px; }
+  .raise-editor { padding: 10px; }
+  .raise-sizing { gap: 8px; }
+  .raise-amount { font-size: 11px; gap: 6px; }
+  .raise-amount input { width: 84px; }
   .between-controls { align-items: stretch; flex-direction: column; gap: 10px; }
   .between-controls > button { min-height: 44px; }
   .stack-editor { justify-content: space-between; }

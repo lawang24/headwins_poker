@@ -1,6 +1,9 @@
 """Server-authoritative, integer-chip no-limit Hold'em for independent tables."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
+from copy import deepcopy
+from datetime import datetime, timezone
+from hashlib import sha256
 from uuid import uuid4
 from deck_of_cards import DeckOfCards
 from phevaluator.evaluator import evaluate_cards
@@ -29,6 +32,7 @@ class Player:
     committed: int = 0
     contribution: int = 0
     acted_at: int | None = None
+    session_id: str | None = None
 
 
 class Table:
@@ -48,6 +52,69 @@ class Table:
         self.history = []
         self.hand_number = 0
         self.deck = DeckOfCards()
+        self.session_id = None
+        self.hand_id = None
+        self.hand_start = None
+        self.event_sequence = 0
+        self.events = []
+        self.profiles = {}
+        self.identities = {}
+
+    def record(self, kind, **data):
+        self.event_sequence += 1
+        self.events.append(
+            deepcopy(
+                {
+                    "schema": 1,
+                    "sequence": self.event_sequence,
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "session_id": self.session_id,
+                    "hand_id": self.hand_id if self.running else None,
+                    "type": kind,
+                    **data,
+                }
+            )
+        )
+
+    def register(self, player):
+        digest = sha256(player.token.encode()).hexdigest()
+        profile = {"player_id": player.id, "name": player.name}
+        self.identities[digest] = profile
+        self.profiles[digest] = profile
+
+    def enter_session(self, player):
+        if self.session_id is None:
+            self.session_id = uuid4().hex
+            self.record("session_started")
+        if player.session_id != self.session_id:
+            player.session_id = self.session_id
+            self.record(
+                "chips_added",
+                player_id=player.id,
+                amount=player.stack,
+                reason="seat_entry",
+                name=player.name,
+            )
+
+    def end_session(self, reason):
+        if self.session_id is None:
+            return
+        for p in self.players:
+            if p.session_id == self.session_id:
+                self.record(
+                    "chips_removed",
+                    player_id=p.id,
+                    amount=p.stack,
+                    reason="session_end",
+                )
+                p.session_id = None
+        self.record("session_ended", reason=reason)
+        self.session_id = None
+
+    def private_players(self):
+        return [
+            {k: v for k, v in asdict(p).items() if k != "token"} for p in self.players
+        ]
 
     @property
     def running(self):
@@ -60,16 +127,32 @@ class Table:
     def player(self, player_id):
         return next(p for p in self.players if p.id == player_id)
 
-    def join(self, name, token=None):
+    def join(self, name, token=None, profile=None):
+        if token is not None and (not isinstance(token, str) or len(token) > 128):
+            raise InvalidAction("Invalid player identity.")
         if token:
             existing = next((p for p in self.players if p.token == token), None)
             if existing:
                 existing.connected = True
+                self.enter_session(existing)
+                self.record(
+                    "player_reconnected", player_id=existing.id, name=existing.name
+                )
                 return existing
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 24:
             raise InvalidAction("Choose a name of 1–24 characters.")
         # Retain seats during hands so reconnects cannot change turn order.
         if not self.running:
+            for p in self.players:
+                if not p.connected:
+                    if p.session_id == self.session_id and self.session_id:
+                        self.record(
+                            "chips_removed",
+                            player_id=p.id,
+                            amount=p.stack,
+                            reason="seat_removed",
+                        )
+                    self.record("seat_removed", player_id=p.id)
             self.players = [p for p in self.players if p.connected]
         if len(self.players) >= 9:
             raise InvalidAction("This table is full (9 seats).")
@@ -79,8 +162,17 @@ class Table:
         while any(p.name == name for p in self.players):
             name = f"{base[:20]} {suffix}"
             suffix += 1
-        p = Player(uuid4().hex, name, uuid4().hex)
+        if token and profile is None:
+            profile = self.identities.get(sha256(token.encode()).hexdigest())
+        p = Player(
+            profile["player_id"] if profile else uuid4().hex,
+            name,
+            token if profile else uuid4().hex,
+        )
         self.players.append(p)
+        self.register(p)
+        self.enter_session(p)
+        self.record("player_joined", player_id=p.id, name=p.name, stack=p.stack)
         return p
 
     def clockwise(self, after, candidates):
@@ -95,8 +187,9 @@ class Table:
             None,
         )
 
-    def log(self, message):
+    def log(self, message, player_id=None):
         self.history = (self.history + [message])[-100:]
+        self.record("message", text=message, player_id=player_id)
 
     def pay(self, p, amount):
         amount = min(amount, p.stack)
@@ -113,6 +206,7 @@ class Table:
         eligible = {p.id for p in self.players if p.connected and p.stack > 0}
         if len(eligible) < 2:
             raise InvalidAction("At least two connected players with chips are needed.")
+        self.hand_id = uuid4().hex
         self.dealer = self.clockwise(self.dealer, eligible)
         self.deck = DeckOfCards()
         self.deck.shuffle()
@@ -120,18 +214,36 @@ class Table:
         self.target, self.min_raise = self.big_blind, self.big_blind
         self.hand_number += 1
         self.street = "preflop"
+        deck_order = list(reversed(self.deck.cards))
         for p in self.players:
             p.in_hand = p.id in eligible
             p.folded = False
             p.committed = p.contribution = 0
             p.acted_at = None
             p.hand = [self.deck.draw(), self.deck.draw()] if p.in_hand else []
+        self.hand_start = {
+            "hand_id": self.hand_id,
+            "session_id": self.session_id,
+            "hand_number": self.hand_number,
+            "dealer": self.dealer,
+            "small_blind": self.small_blind,
+            "big_blind": self.big_blind,
+            "players": self.private_players(),
+            "deck_order": deck_order,
+        }
+        self.record("hand_started", **self.hand_start)
         sb = (
             self.dealer if len(eligible) == 2 else self.clockwise(self.dealer, eligible)
         )
         bb = self.clockwise(sb, eligible)
-        self.pay(self.player(sb), self.small_blind)
-        self.pay(self.player(bb), self.big_blind)
+        for pid, blind, kind in (
+            (sb, self.small_blind, "small_blind"),
+            (bb, self.big_blind, "big_blind"),
+        ):
+            p = self.player(pid)
+            paid = min(p.stack, blind)
+            self.pay(p, blind)
+            self.record("blind_posted", player_id=pid, amount=paid, blind=kind)
         self.pending = {p.id for p in self.players if p.in_hand and p.stack > 0}
         self.log(
             f"Hand {self.hand_number}: {self.player(self.dealer).name} is the dealer."
@@ -148,6 +260,7 @@ class Table:
         if not self.running or player_id != self.actor:
             raise InvalidAction("Wait for your turn.")
         p = self.player(player_id)
+        before = p.stack
         if action == "fold":
             p.folded = True
             self.log(f"{p.name} folds.")
@@ -197,6 +310,17 @@ class Table:
             )
         else:
             raise InvalidAction("Unknown poker action.")
+        self.record(
+            "action",
+            player_id=p.id,
+            action=action,
+            amount=before - p.stack,
+            raise_to=amount if action == "raise" else None,
+            committed=p.committed,
+            contribution=p.contribution,
+            stack=p.stack,
+            street=self.street,
+        )
         self.pending.discard(p.id)
         self.advance(p.id)
 
@@ -224,9 +348,12 @@ class Table:
             self.street = {"preflop": "flop", "flop": "turn", "turn": "river"}[
                 self.street
             ]
-            self.deck.draw()  # burn
+            burned = self.deck.draw()
             self.board.extend(
                 self.deck.draw() for _ in range(3 if self.street == "flop" else 1)
+            )
+            self.record(
+                "board_dealt", street=self.street, board=self.board, burned=burned
             )
             self.target, self.min_raise = 0, self.big_blind
             for p in self.players:
@@ -291,6 +418,16 @@ class Table:
                 if payouts[p.id]
             )
         )
+        self.record(
+            "hand_completed",
+            start=self.hand_start,
+            board=self.board,
+            result=self.result,
+            players=self.private_players(),
+            net={
+                p.id: payouts[p.id] - p.contribution for p in self.players if p.in_hand
+            },
+        )
         self.pot = 0
         self.actor = None
         self.pending = set()
@@ -299,8 +436,17 @@ class Table:
     def disconnect(self, player_id):
         p = self.player(player_id)
         p.connected = False
+        self.record("player_disconnected", player_id=p.id)
         if self.running and p.in_hand and not p.folded and p.stack > 0:
             p.folded = True
+            self.record(
+                "action",
+                player_id=p.id,
+                action="fold",
+                amount=0,
+                street=self.street,
+                reason="disconnect",
+            )
             self.pending.discard(p.id)
             self.log(f"{p.name} disconnected and folded.")
             # Preserve the current actor unless the departing seat owned the turn.
@@ -310,10 +456,24 @@ class Table:
                 ids = [q.id for q in self.players]
                 self.advance(ids[(ids.index(self.actor) - 1) % len(ids)])
 
+        if not any(p.connected for p in self.players):
+            self.end_session("table_empty")
+
     def set_stack(self, player_id, amount):
         if self.running:
             raise InvalidAction("Stacks can only be changed between hands.")
-        self.player(player_id).stack = chips(amount)
+        amount = chips(amount)
+        p = self.player(player_id)
+        delta = amount - p.stack
+        p.stack = amount
+        if delta:
+            self.record(
+                "chips_added" if delta > 0 else "chips_removed",
+                player_id=p.id,
+                amount=abs(delta),
+                stack=amount,
+                reason="stack_adjustment",
+            )
 
     def state(self, viewer):
         p = self.player(viewer)

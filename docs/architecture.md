@@ -12,11 +12,13 @@ flowchart LR
     Connections -->|Validated commands| Game[Game engine]
     Game -->|Player views| Connections
     Connections -->|Save before publishing| Persistence[Persistence]
-    Persistence <--> Store[(DynamoDB)]
+    Persistence -->|Atomic checkpoint and history| Store[(DynamoDB)]
+    Store -->|Private queries| Export[Offline history exports]
 ```
 
 One backend process coordinates the live game. DynamoDB is optional: it keeps a
-checkpoint for restart recovery. Without it, the game lives only in memory.
+checkpoint for restart recovery and permanent game history, saved together.
+Without it, the game lives only in memory and history is not retained.
 
 ## Modules
 
@@ -28,7 +30,7 @@ behavior and links to the implementation.
 | Browser | Displaying the table and collecting player input. | [UI state and reconnecting](architecture/browser.md) |
 | Connections | Sessions, request validation, and ordered updates to players. | [Command flow and WebSocket messages](architecture/connections.md) |
 | Game | Poker rules, chips, turn order, payouts, and private player views. | [Game lifecycle and privacy](architecture/game.md) |
-| Persistence | Saving the table and recovering after a restart. | [Checkpoints and failure handling](architecture/persistence.md) |
+| Persistence | Atomic checkpoints, private history, and restart recovery. | [Checkpoints and failure handling](architecture/persistence.md) |
 
 [Operations](architecture/operations.md) covers hosting, infrastructure, cost
 monitoring, and verification. The [README](../README.md) contains setup commands.
@@ -37,8 +39,8 @@ monitoring, and verification. The [README](../README.md) contains setup commands
 
 A player joins or reconnects to a seat. When they act, the connection layer passes
 the request to the game engine, which checks the rules and updates the table.
-With persistence enabled, the server saves that change before sending each player
-a fresh view. The browser displays that view.
+With persistence enabled, the server saves the checkpoint and associated history
+in one transaction before sending each player a fresh view. The browser displays that view.
 
 This division keeps game decisions on the server and opponents’ hidden cards out
 of each player’s view. The browser never has to simulate the game itself.
@@ -47,8 +49,12 @@ of each player’s view. The browser never has to simulate the game itself.
 
 - **One shared game, one backend worker.** Multiple rooms and distributed game
   coordination are not implemented.
-- **Sessions identify seats, not accounts.** A retained seat can be reclaimed;
-  this is not a permanent account system.
+- **Browser identities outlive seats.** A saved browser credential identifies the
+  same player across sessions, including after seat pruning. Cross-device accounts
+  and identity recovery are not implemented.
+- **History stays private.** The archive retains actions, cards, deck order, and
+  results. Authorized offline exports calculate player net chips separately from
+  rebuys and cash-outs; equity calculations and a history UI are future work.
 - **Recovery preserves chips, not an interrupted hand.** Restarting with a saved
   checkpoint cancels unfinished hands and refunds contributions. Completed
   payouts remain intact. A storage failure stops play until recovery.

@@ -12,9 +12,12 @@ class MemoryCheckpoint:
         self.payload = None
         self.writes = 0
 
-    def save(self, payload):
+    def save(self, payload, events=(), profiles=None):
         self.payload = payload
         self.writes += 1
+
+    def identity(self, token):
+        return None
 
     def load(self):
         return restore(self.payload) if self.payload else Table()

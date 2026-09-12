@@ -1,0 +1,2 @@
+moto[server,dynamodb]==5.2.3
+playwright==1.62.0
