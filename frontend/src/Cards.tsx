@@ -1,9 +1,5 @@
 const assets = import.meta.glob(
-  [
-    "./assets/SVG-cards-1.3/*.svg",
-    "!./assets/SVG-cards-1.3/*2.svg",
-    "!./assets/SVG-cards-1.3/*joker.svg",
-  ],
+  "./assets/clean-cards/*.svg",
   { eager: true, query: "?inline", import: "default" },
 ) as Record<string, string>;
 const ranks: Record<string, string> = {
@@ -24,7 +20,7 @@ function Card({ code }: { code: string }) {
   return (
     <img
       className="card"
-      src={assets[`./assets/SVG-cards-1.3/${name}.svg`]}
+      src={assets[`./assets/clean-cards/${name}.svg`]}
       alt={name.replaceAll("_", " ")}
     />
   );

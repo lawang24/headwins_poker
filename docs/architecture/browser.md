@@ -20,8 +20,12 @@ and footer reserve their space while the table fills the remaining height. Seats
 and cards adapt to the table dimensions; short landscape screens use oval seating.
 The activity log scrolls inside its bounded panel rather than expanding the page.
 Feedback occupies a reserved top-right header corner and cannot overlay betting controls.
-[Cards.tsx](../../frontend/src/Cards.tsx) embeds the existing SVG assets as data URLs
-in the JavaScript bundle, so dealing does not fetch separate card files. Opponents
+[Cards.tsx](../../frontend/src/Cards.tsx) embeds the 52 [clean card faces](../../frontend/src/assets/clean-cards/)
+as data URLs in the JavaScript bundle, so dealing does not fetch separate card files.
+Each face has one oversized outlined serif rank and one offset suit on white;
+all ranks, including face cards, use the same layout. Vector outlines keep the
+lettering consistent without browser font dependencies. The [asset generator](../../frontend/scripts/generate-cards.mjs)
+uses shared rank outlines and suit paths to rebuild the deck. Opponents
 show card backs during play and only the server-provided result hands at showdown.
 [ActionControls.tsx](../../frontend/src/ActionControls.tsx) owns the raise and stack
 forms. During the viewer's turn, a compact outlined row presents Call, Bet/Raise,
