@@ -108,7 +108,7 @@ GitHub Actions runs the backend regression suite and frontend lint/build on push
 
 ## Structure
 
-- [Architecture guide](docs/architecture.md): how the components, game flow, sessions, and deployment fit together. [AGENTS.md](AGENTS.md) requires keeping it current with relevant code changes.
+- [Architecture guide](docs/architecture.md): a short system overview with focused module pages for implementation details. [AGENTS.md](AGENTS.md) requires keeping it current with relevant code changes.
 - `backend/game.py`: synchronous game rules and serializable player views.
 - `backend/main.py`: WebSocket protocol, the game lock, sessions, bounded broadcasts, and `/health`.
 - `backend/storage.py`: versioned DynamoDB checkpoints and restart recovery.
