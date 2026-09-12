@@ -1,318 +1,192 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocketState
-from typing import List
+"""Run locally with python run.py to load the backend .env settings."""
+
+import asyncio
 import json
-from deck_of_cards import DeckOfCards
-from phevaluator.evaluator import evaluate_cards
-from helpers import getPlayerFromWebsocket
+import logging
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from game import Table, InvalidAction
+from storage import DynamoStore, StorageError, snapshot
+from fastapi.responses import JSONResponse
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app):
+    if server.store is None:
+        server.store = DynamoStore.from_env()
+    if server.store:
+        server.table = await asyncio.to_thread(server.store.load)
+        await server.checkpoint()
+    yield
 
 
-class ConnectionManager:
+app = FastAPI(lifespan=lifespan)
 
-    def __init__(self):
-        return
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+@dataclass
+class GameServer:
+    table: Table = field(default_factory=Table)
+    sockets: dict = field(default_factory=dict)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    store: object = None
+    failed: bool = False
 
-        await manager.send_game_state_to_all()
-
-    async def send_game_state_to_all(self):
-        await manager.send_to_all(
-            {"type": "game_state_update", "game_state": GAME._get_shared_state()}
-        )
-
-    def get_username(self, websocket: WebSocket) -> str:
-        for player in GAME.players:
-            if websocket == player.websocket:
-                return player.username
-        return "Not found"
-
-    async def disconnect(self, websocket: WebSocket) -> None:
-
-        for i, player in enumerate(GAME.players):
-            if player.websocket == websocket:
-                GAME.players.pop(i)
-                break
-        else:
-            # Optional: handle the case where the websocket wasn't found
-            print("Player with this websocket not found in GAME.players")
-
-    async def send_to_all(self, message: object):
-        for player in GAME.players:
-            await self.send_to_one(player.websocket, message)
-
-    async def send_to_one(self, websocket: WebSocket, message: object):
-        if websocket.client_state == WebSocketState.CONNECTED:
+    async def checkpoint(self):
+        if self.failed:
+            raise StorageError("Storage unavailable; restart the backend to recover.")
+        if self.store:
             try:
-                await websocket.send_text(json.dumps(message))
-            except Exception:
-                await self.disconnect(websocket)
-
-
-class GameState:
-    def __init__(self):
-        self.deck = DeckOfCards()
-        self.deck.shuffle()
-        self.pot = 0
-        self.players: List[Player] = []
-        self.board: List[str] = []
-        self.dealer_index = 0
-        self.small_blind = 5
-        self.big_blind = 10
-        self.started = False
-        self.current_player_index = 0
-        self.people_in_hand: List[Player] = []
-        self.last_raise = 0
-        self.threshold = 0
-
-    async def restart_round(self):
-        self.started = True
-        self.pot = 0
-        self.board = []
-
-        # shuffle the deck
-        self.deck = DeckOfCards()
-        self.deck.shuffle()
-
-        active_player_count = 0
-        # draw cards
-        for player in self.players:
-            if player.isActive:
-                active_player_count += 1
-                player.isInHand = True
-                player.hand = [self.deck.draw(), self.deck.draw()]
-                await manager.send_to_one(
-                    player.websocket, {"type": "get_hand", "hand": player.hand}
+                await asyncio.to_thread(self.store.save, snapshot(self.table))
+            except Exception as exc:
+                self.failed = True
+                logging.error(
+                    "Game persistence failed (%s); stopping play.", type(exc).__name__
                 )
+                peers = list(self.sockets.values())
+                self.sockets.clear()
+                await asyncio.gather(*(self.close(peer, code=1011) for peer in peers))
+                raise StorageError(
+                    "Storage unavailable; restart the backend to recover."
+                ) from exc
 
-        if active_player_count == 0:
-            return
+    @staticmethod
+    async def close(socket, code=1000):
+        try:
+            await asyncio.wait_for(socket.close(code=code), timeout=2)
+        except (WebSocketDisconnect, RuntimeError, OSError, asyncio.TimeoutError):
+            pass
 
-        # increment the dealer between hands
-        self.dealer_index = (self.dealer_index + 1) % active_player_count
-        while not self.players[self.dealer_index].isActive:
-            self.dealer_index = (self.dealer_index + 1) % active_player_count
+    async def broadcast(self):
+        await self.checkpoint()
 
-        n_players = len(self.players)
-        # assign position ordering for each person
-        for i in range(n_players):
-            self.players[(self.dealer_index + i) % n_players].position = i
+        async def send(pid, socket):
+            try:
+                await asyncio.wait_for(
+                    socket.send_json({"type": "state", "state": self.table.state(pid)}),
+                    timeout=2,
+                )
+            except (WebSocketDisconnect, RuntimeError, OSError, asyncio.TimeoutError):
+                return pid, socket
+            return None
 
-        await self.start_round(True)
+        # Called under the game lock. A failed peer must not disconnect the actor
+        # whose action triggered this broadcast. Repair state and notify survivors.
+        while self.sockets:
+            failures = [
+                failure
+                for failure in await asyncio.gather(
+                    *(send(pid, socket) for pid, socket in list(self.sockets.items()))
+                )
+                if failure
+            ]
+            if not failures:
+                break
+            for pid, socket in failures:
+                if self.sockets.get(pid) is socket:
+                    del self.sockets[pid]
+                    self.table.disconnect(pid)
+            await asyncio.gather(*(self.close(socket) for _, socket in failures))
+            await self.checkpoint()
 
-    async def start_round(self, preflop: bool):
 
-        print("starting new betting rotation")
-        self.people_in_hand = [p for p in self.players if p.isInHand]
-        self.people_in_hand.sort(key=lambda x: x.position)
+server = GameServer()
 
-        if len(self.board) == 5 or len(self.people_in_hand) <= 1:
-            await self.end_round()
-            return
 
-        # reset the player status
-        for p in self.people_in_hand:
-            p.money_commited_this_round = 0
-            p.ready_to_see_next_round = False
-            p.your_turn = False
-
-        # allow the small and big blind to go last
-        if preflop:
-            self.current_player_index = 2
-            self.threshold = self.big_blind
-            self.people_in_hand[
-                (self.current_player_index) % len(self.people_in_hand)
-            ].money_commited_this_round = self.small_blind
-            self.people_in_hand[
-                (self.current_player_index + 1) % len(self.people_in_hand)
-            ].money_commited_this_round = self.big_blind
-            self.pot = self.big_blind + self.small_blind
-        else:
-            if len(self.board) == 0:
-                self.board = [self.deck.draw() for _ in range(3)]
-            else:
-                self.board.append(self.deck.draw())
-            self.current_player_index = 0
-            self.threshold = 0
-
-        self.current_player_index %= len(self.people_in_hand)
-
-        await self.allow_to_raise()
-
-    def _get_shared_state(self):
-        # Don’t send private server objects like the deck
-        return {
-            "pot": self.pot,
-            "big_blind": self.big_blind,
-            "small_blind": self.small_blind,
-            "board": self.board,
-            "players": [p.get_shared_payload() for p in self.players],
-            "threshold": self.threshold,
-            "last_raise": self.last_raise,
-            "started": self.started,
-        }
-
-    async def allow_to_raise(self):
-        self.people_in_hand[
-            self.current_player_index % len(self.people_in_hand)
-        ].your_turn = True
-
-    async def set_blind(self, player, amount: int):
-        await manager.send_to_one(
-            player.websocket, {"type": "set_blind", "amount": amount}
-        )
-
-    async def end_round(self):
-
-        live_players = [p for p in self.players if p.isInHand]
-
-        # didnt' get the river
-        if len(live_players) == 1:
-            pot_winner = live_players[
-                0
-            ]  # compare by the evaluate_cards score )[1]  # get the player
-        else:
-            # minimum hand ranking takes it
-            ranks = [(evaluate_cards(*(self.board + p.hand)), p) for p in live_players]
-            pot_winner = min(ranks, key=lambda x: x[0])[
-                1
-            ]  # compare by the evaluate_cards score )[1]  # get the player
-
-        # TODO: implement chopped pots
-        await manager.send_to_all(f"{pot_winner.username} wins the pot")
-        pot_winner.stack_size += GAME.pot
-
-        await self.restart_round()
-
-class Player:
-
-    def __init__(self, websocket: WebSocket, username: str):
-        self.username: str = username
-        self.isActive: bool = True
-        self.isInHand: bool = False
-        self.stack_size: int = 0
-        self.hand: List[str] = []
-        self.websocket = websocket
-        self.position = 0
-        self.ready_to_see_next_round = False
-        self.money_commited_this_round: int = 0
-        self.your_turn: bool = False
-
-    def get_shared_payload(self):
-        return {
-            "username": self.username,
-            "isActive": self.isActive,
-            "isInHand": self.isInHand,
-            "stack_size": self.stack_size,
-            "money_commited_this_round": self.money_commited_this_round,
-            "your_turn": self.your_turn,
-        }
+@app.get("/health")
+def health():
+    if server.failed:
+        return JSONResponse({"status": "storage_unavailable"}, status_code=503)
+    return {"status": "ok"}
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-
-    while True:
-        try:
-            data_str = await websocket.receive_text()
-        except WebSocketDisconnect:
-            print("That brother has already left!")
-            await manager.disconnect(websocket)
-            break
-        except RuntimeError as e:
-            print("That brother is already disconnecting.. chill...")
-            print(e)
-            break
-
-        data = json.loads(data_str)
-
-        print("received", data)
-        msg_type = data.get("type")
-
-        match msg_type:
-
-            case "join":
-                username = data.get("username")
-                GAME.players.append(Player(websocket, username))
-
-            case "message":
-                username = manager.get_username(websocket)
-                text = data.get("text", "")
-                await manager.send_to_all(f"{username}: {text}")
-
-            case "start_game":
-                await GAME.restart_round()
-
-            case "commit_money":
-                raise_amount = data.get("amount")
-                username = manager.get_username(websocket)
-                await manager.send_to_all(f"{username}: puts in {raise_amount}")
-
-                current_player = GAME.people_in_hand[GAME.current_player_index]
-
-                if current_player.websocket != websocket:
-                    raise RuntimeWarning(
-                        f"current turn player unclear - please debug: "
-                        f"current_player.websocket={current_player.websocket}, websocket={websocket}"
-                    )
-
-                # new raiser, everyone else needs to check as well
-                if raise_amount > GAME.threshold:
-                    for p in GAME.people_in_hand:
-                        p.ready_to_see_next_round = False
-                    GAME.last_raise = raise_amount - GAME.threshold
-                    GAME.threshold = raise_amount
-
-                money_put_in = raise_amount - current_player.money_commited_this_round
-                GAME.pot += money_put_in
-                current_player.money_commited_this_round += money_put_in
-                current_player.stack_size -= money_put_in
-                current_player.ready_to_see_next_round = True
-                current_player.your_turn = False
-
-                if all(p.ready_to_see_next_round for p in GAME.people_in_hand):
-                    await GAME.start_round(False)
-                else:
-                    # let the next person bet
-                    GAME.current_player_index = (GAME.current_player_index + 1) % len(
-                        GAME.people_in_hand
-                    )
-                    GAME.people_in_hand[GAME.current_player_index].your_turn = True
-
-            case "fold":
-                GAME.people_in_hand[
-                    GAME.current_player_index
-                ].ready_to_see_next_round = True
-                GAME.people_in_hand[GAME.current_player_index].isInHand = False
-
-                # there's a chance you fold and it automatically ends
-                if sum([p.isInHand for p in GAME.players]) == 1:
-                    await GAME.end_round()
-                else:
-                    if all(p.ready_to_see_next_round for p in GAME.people_in_hand):
-                        await GAME.start_round(False)
-                    else:
-                        # let the next person bet
-                        GAME.current_player_index = (
-                            GAME.current_player_index + 1
-                        ) % len(GAME.people_in_hand)
-                        GAME.people_in_hand[GAME.current_player_index].your_turn = True
-
-            case "set_stack":
-                stack_amount = data.get("amount")
-                getPlayerFromWebsocket(websocket, GAME).stack_size = stack_amount
-
-            case _:
-                await manager.send_to_one(
-                    websocket, f"Unknown message type: {msg_type}"
+    await websocket.accept()
+    if server.failed:
+        await server.close(websocket, code=1011)
+        return
+    player = None
+    try:
+        while True:
+            packet = await websocket.receive()
+            if packet["type"] == "websocket.disconnect":
+                break
+            raw = packet.get("text")
+            if raw is None:
+                await websocket.send_json(
+                    {"type": "error", "message": "Send JSON text, not binary data."}
                 )
-
-        await manager.send_game_state_to_all()
-
-
-manager = ConnectionManager()
-GAME = GameState()
+                continue
+            if len(raw) > 4096:
+                await websocket.send_json(
+                    {"type": "error", "message": "Message is too large."}
+                )
+                continue
+            async with server.lock:
+                if server.failed:
+                    break
+                try:
+                    data = json.loads(raw)
+                    if not isinstance(data, dict):
+                        raise InvalidAction("Expected a JSON object.")
+                    kind = data.get("type")
+                    if not isinstance(kind, str):
+                        raise InvalidAction("Message type must be a string.")
+                    if player and server.sockets.get(player.id) is not websocket:
+                        raise InvalidAction("This seat is connected in another window.")
+                    if kind == "join":
+                        if player:
+                            raise InvalidAction("You have already joined.")
+                        player = server.table.join(data.get("name"), data.get("token"))
+                        old = server.sockets.get(player.id)
+                        server.sockets[player.id] = websocket
+                        await server.checkpoint()
+                        if old and old is not websocket:
+                            await server.close(old, code=4001)
+                        await websocket.send_json(
+                            {"type": "session", "token": player.token, "id": player.id}
+                        )
+                    elif not player:
+                        raise InvalidAction("Join the table first.")
+                    elif kind == "start":
+                        server.table.start(player.id)
+                    elif kind in {"fold", "check_call", "raise"}:
+                        server.table.act(player.id, kind, data.get("amount"))
+                    elif kind == "set_stack":
+                        server.table.set_stack(player.id, data.get("amount"))
+                    elif kind == "chat":
+                        message = data.get("text")
+                        if (
+                            not isinstance(message, str)
+                            or not 1 <= len(message.strip()) <= 300
+                        ):
+                            raise InvalidAction("Chat must contain 1–300 characters.")
+                        server.table.log(f"{player.name}: {message.strip()}")
+                    else:
+                        raise InvalidAction("Unknown message type.")
+                except (InvalidAction, json.JSONDecodeError) as exc:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": str(exc)
+                            if isinstance(exc, InvalidAction)
+                            else "Invalid JSON.",
+                        }
+                    )
+                await server.broadcast()
+    except (WebSocketDisconnect, RuntimeError, OSError, StorageError):
+        pass
+    finally:
+        async with server.lock:
+            if (
+                not server.failed
+                and player
+                and server.sockets.get(player.id) is websocket
+            ):
+                del server.sockets[player.id]
+                server.table.disconnect(player.id)
+                try:
+                    await server.broadcast()
+                except StorageError:
+                    pass

@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Headwins Poker durable game storage with fixed free-tier-sized provisioned capacity.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@2
+  com.aws.cloudformation.Context:
+    ref: [../docs/architecture.md]
+Resources:
+  GameTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: One compressed checkpoint keeps the shared game update atomic and storage bounded.
+        must:
+          - Keep provisioned capacity fixed; do not enable autoscaling or paid backups for this setup.
+          - Only the backend may access private checkpoints.
+    Properties:
+      TableName: !Sub '${AWS::StackName}-game'
+      BillingMode: PROVISIONED
+      TableClass: STANDARD
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 25
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      DeletionProtectionEnabled: true
+      # The default AWS-owned key encrypts data at rest without KMS key charges.
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      Tags:
+        - Key: Project
+          Value: headwins-poker
+Outputs:
+  TableName:
+    Description: Backend DYNAMODB_TABLE setting
+    Value: !Ref GameTable
+  TableArn:
+    Description: Scope backend dynamodb GetItem and PutItem permissions to this ARN
+    Value: !GetAtt GameTable.Arn

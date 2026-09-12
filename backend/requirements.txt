@@ -1,4 +1,6 @@
 annotated-types==0.7.0
+boto3==1.43.93
+botocore[crt]==1.43.93
 anyio==4.9.0
 certifi==2025.7.14
 click==8.2.1
