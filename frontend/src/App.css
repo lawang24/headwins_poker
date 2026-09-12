@@ -138,104 +138,6 @@ h1 {
   color: #c2d4c0;
   margin: 17px 0 0;
 }
-.board-placeholder {
-  color: #a2bba7;
-  border: 1px dashed #7e9f8455;
-  border-radius: 8px;
-  padding: 20px;
-  font-size: 13px;
-}
-.seats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 23px 0;
-}
-.seat {
-  background: #1b2a24;
-  border: 1px solid #3d5143;
-  border-radius: 11px;
-  padding: 13px 15px;
-  min-width: 0;
-}
-.seat.acting {
-  border-color: #e2c074;
-  box-shadow: 0 0 0 1px #e2c074;
-}
-.seat.folded {
-  opacity: 0.58;
-}
-.seat-title {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-.dealer {
-  border-radius: 50%;
-  background: #eee6d5;
-  color: #3e493d;
-  font-weight: bold;
-  width: 21px;
-  height: 21px;
-  text-align: center;
-  flex-shrink: 0;
-}
-.stack {
-  font-size: 23px;
-  color: #f0dab0;
-  margin: 4px 0;
-}
-.stack span {
-  font-size: 11px;
-  color: #adbdaf;
-}
-.seat-meta {
-  font-size: 11px;
-  color: #b2c1b4;
-}
-.seat .cards {
-  justify-content: flex-start;
-  margin-top: 10px;
-}
-.seat .card {
-  width: 37px;
-  height: 54px;
-}
-.payout {
-  font-size: 12px;
-  color: #a3d9a9;
-  margin-top: 8px;
-}
-.hand-controls {
-  padding: 22px;
-  display: flex;
-  gap: 30px;
-  align-items: flex-start;
-}
-.hand-controls > .controls {
-  flex: 1;
-  min-width: 0;
-}
-.hand-controls > .controls h2 {
-  margin-bottom: 5px;
-}
-.action-row {
-  display: flex;
-  gap: 8px;
-}
-.raise-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
-.raise-row label {
-  flex: 1;
-  min-width: 130px;
-}
 .chat-panel {
   display: flex;
   flex-direction: column;
@@ -280,90 +182,185 @@ h1 {
   color: #9caf9f;
   margin: 24px 0 0;
 }
-@media (min-width: 1300px) {
-  .felt {
-    min-height: 340px;
-  }
+/* Table shell: charcoal surface and green, black-railed felt. */
+.app { max-width: 1600px; padding: 18px 24px; }
+header { margin-bottom: 14px; }
+h1 { font-size: 20px; letter-spacing: -.6px; text-transform: uppercase; }
+header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
+.panel { background: #292929; border-color: #3b3b3b; border-radius: 5px; }
+.felt {
+  background: radial-gradient(ellipse at 48% 35%, #238445, #18773d 70%, #176638);
+  border: 10px solid #1b1b1b;
+  outline: 0; border-radius: 50%; min-height: 360px;
+  box-shadow: inset 0 0 0 7px #ffffff04, 0 18px 0 #1c1c1c, 0 28px 30px #0006;
 }
-@media (max-width: 1000px) {
-  .game-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .chat-panel {
-    max-height: 320px;
-    min-height: 260px;
-  }
-  .log {
-    max-height: 180px;
-  }
-  .app {
-    padding: 22px;
-  }
+.pot { background: #145c3870; min-width: 110px; border-radius: 22px; text-align: center; padding: 2px 18px; font-size: 23px; color: white; }
+.pot-label { color: #b3d2bd; font-size: 9px; letter-spacing: .5px; }
+.table-heading { color: #aaa; }
+.table-heading strong { color: #ddd; }
+.table-caption { color: #c9dfce; }
+
+.table-stage { height: 560px; position: relative; max-width: 1120px; margin: auto; isolation: isolate; }
+.table-stage .felt { position: absolute; inset: 20% 14%; min-height: 0; padding: 0; }
+.board-content { position: absolute; top: 18%; left: 8%; right: 8%; text-align: center; }
+.board-content .pot { display: inline-block; margin: 0 0 16px; min-width: 100px; font-size: 22px; }
+.board-content .pot span { font-size: 10px; color: #b7d2bc; margin-right: 4px; }
+.community-cards { height: 124px; }
+.community-cards .card { width: clamp(48px, 5.8vw, 84px); height: auto; aspect-ratio: 5 / 7; }
+.felt-brand { position: absolute; bottom: 11%; font-size: 15px; opacity: .13; letter-spacing: -1px; color: #fff; }
+.table-caption { font-size: 11px; margin: 8px 0; }
+.table-seat { position: absolute; left: var(--seat-x); top: var(--seat-y); transform: translate(-50%, -50%); width: 162px; z-index: 3; }
+.seat-body { position: relative; display: flex; align-items: center; min-height: 72px; }
+.seat-cards { width: 76px; flex-shrink: 0; z-index: 1; }
+.seat-cards .cards { flex-wrap: nowrap; gap: 0; }
+.seat-cards .card { width: 43px; height: 62px; filter: drop-shadow(0 2px 3px #0005); }
+.seat-cards .card:first-child { transform: rotate(-8deg); margin-right: -6px; }
+.seat-cards .card:last-child { transform: rotate(8deg); }
+.card-backs { display: flex; height: 62px; padding-top: 1px; }
+.card-backs span { width: 43px; height: 60px; flex-shrink: 0; border: 2px solid #eee; border-radius: 3px; background: repeating-linear-gradient(125deg,#bd6666 0 2px,#c36d6d 2px 4px); box-shadow: 0 1px 4px #0007; transform: rotate(-8deg); }
+.card-backs span+span { margin-left: -9px; transform: rotate(8deg); }
+.empty-cards { height: 62px; text-align: center; font-size: 44px; line-height: 1; font-weight: 800; color: #aaa; }
+.nameplate { background: #2c2c2ce8; padding: 8px 9px 8px 12px; margin-left: -2px; min-width: 0; flex: 1; border-radius: 4px; box-shadow: 0 2px 10px #0003; }
+.nameplate strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #ddd; }
+.seat-balance { display: block; font-size: 13px; color: #fff; font-weight: 600; }
+.player-status { display: block; font-size: 9px; color: #a6a6a6; white-space: nowrap; }
+.dealer-marker { position: absolute; background: #eee; color: #4773b0; border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; font-size: 12px; font-weight: 800; left: -12px; top: -20px; }
+.table-bet { position: absolute; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; z-index: 2; color: #f6f0cd; }
+.table-bet i { display: block; width: 21px; height: 21px; border-radius: 50%; background: #d6d668; border: 3px dashed #eeeaa5; box-shadow: 0 2px 0 #9e9b3f; }
+.seat-payout { position: absolute; right: 0; bottom: -16px; color: #d5e398; font-size: 12px; font-weight: 700; }
+.table-stage .felt { inset: 18% 16%; }
+.is-acting .nameplate { background: #f5f5f5; box-shadow: 0 0 24px #ffffff65; }
+.is-acting .nameplate strong, .is-acting .seat-balance { color: #252525; }
+.is-acting .player-status { color: #555; }
+.is-folded .seat-cards { opacity: .25; }
+.is-folded .nameplate, .is-disconnected .nameplate { opacity: .5; }
+.is-winner .nameplate { box-shadow: 0 0 20px #dfdf8b66; }
+.is-winner .seat-balance { color: #e4e599; }
+
+.action-controls { display: flex; align-items: center; gap: 24px; padding: 16px 18px; background: #202020ed; border: 1px solid #393939; border-radius: 5px; }
+.action-status { width: 170px; flex-shrink: 0; font-size: 14px; font-weight: 600; color: #eee; }
+.action-status span { display: block; color: #aaa; font-size: 11px; font-weight: 400; margin-top: 5px; }
+.betting-controls { flex: 1; min-width: 0; }
+.primary-actions { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 8px; }
+.primary-actions button { min-height: 44px; text-transform: uppercase; font-size: 12px; letter-spacing: .4px; }
+.primary-actions .fold-action { background: #414141; }
+.primary-actions .raise-action { background: #8b9545; color: white; border-color: #8b9545; }
+.raise-editor { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+.raise-amount { display: flex; flex-direction: row; align-items: center; font-size: 11px; white-space: nowrap; gap: 8px; }
+.raise-amount input { width: 92px; padding: 6px 8px; }
+.raise-slider { flex: 1; min-width: 50px; accent-color: #8b9545; padding: 0; height: 24px; background: transparent; border: 0; }
+.all-in-action { padding: 8px 12px; font-size: 11px; min-height: 38px; }
+.between-controls { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex: 1; }
+.stack-editor { display: flex; gap: 8px; align-items: end; }
+.stack-editor label { font-size: 10px; gap: 2px; }
+.stack-editor input { width: 115px; }
+.chat-panel { background: #222; border-color: #333; padding: 14px; max-height: 730px; min-height: 0; }
+.chat-panel h2 { font-size: 14px; color: #bbb; border-color: #373737; padding: 5px 0 12px; }
+.log { font-size: 11px; color: #aaa; }
+.log p { border-color: #ffffff06; }
+.chat-panel input, input { background: #262626; border-color: #555; border-radius: 3px; }
+.chat-toggle { display: none; }
+.app footer { font-size: 10px; color: #929292; margin-top: 14px; }
+.join { background: #111d16ed; max-width: 400px; padding: 28px; box-shadow: 0 15px 40px #0005; }
+.join h2 { text-align: center; font-weight: 400; font-size: 21px; text-transform: uppercase; letter-spacing: 5px; }
+.join .eyebrow { text-align: center; color: #aaa; }
+.join .primary { min-height: 58px; text-transform: uppercase; }
+
+@media (max-width: 1023px) {
+  .app { padding: 16px; }
+  .game-layout { display: block; }
+  .chat-toggle { display: inline-block; }
+  .chat-panel { display: none; margin-top: 16px; }
+  .chat-panel.chat-open { display: flex; height: 300px; }
+  .table-stage { height: 720px; max-width: 600px; }
+  .table-stage .felt { inset: 7% 20% 10%; border-radius: 70px; border-width: 8px; }
+  .table-seat { left: var(--mobile-x); top: var(--mobile-y); width: 112px; }
+  .seat-body { flex-direction: column; align-items: stretch; }
+  .seat-cards { align-self: center; width: 76px; height: 58px; }
+  .nameplate { margin: 0; padding: 6px 9px; min-height: 54px; }
+  .nameplate strong { font-size: 12px; }
+  .player-status { font-size: 9px; }
+  .dealer-marker { left: -8px; top: 44px; }
+  .seat-payout { bottom: -17px; }
+  .table-bet { left: var(--mobile-bet-x) !important; top: var(--mobile-bet-y) !important; }
+  .table-bet i { width: 16px; height: 16px; }
+  .board-content { left: -8%; right: -8%; top: 36%; }
+  .board-content .pot { margin-bottom: 12px; font-size: 20px; }
+  .community-cards .card { width: 40px; height: 58px; }
+  .community-cards { height: 60px; }
+  .felt-brand { bottom: 12%; }
+  .action-controls { gap: 14px; }
+  .action-status { width: 140px; }
 }
-@media (max-width: 560px) {
-  .app {
-    padding: 16px 12px;
-  }
-  header {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-bottom: 20px;
-  }
-  h1 {
-    font-size: 26px;
-  }
-  .connection-info {
-    gap: 12px;
-  }
-  .connection-info button {
-    padding: 6px 10px;
-  }
-  .felt {
-    border-width: 6px;
-    border-radius: 45px;
-    min-height: 260px;
-    padding: 22px 9px;
-  }
-  .card {
-    width: 45px;
-    height: 65px;
-  }
-  .cards {
-    gap: 5px;
-  }
-  .seats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .seat {
-    padding: 10px;
-  }
-  .hand-controls {
-    flex-direction: column;
-    padding: 16px;
-    gap: 18px;
-  }
-  .hand-controls > .controls {
-    width: 100%;
-  }
-  .hand-controls > .controls .hint {
-    margin-bottom: 12px;
-  }
-  .join {
-    padding: 24px;
-    margin: 35px auto;
-  }
-  .table-heading {
-    font-size: 10px;
-    margin-left: 0;
-    margin-right: 0;
-  }
-  .raise-row label {
-    min-width: 110px;
-  }
-  .raise-row button {
-    padding: 10px;
-  }
-  .stack {
-    font-size: 20px;
-  }
+@media (max-width: 600px) {
+  .app { padding: 10px 12px; }
+  header { flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px; }
+  h1 { font-size: 17px; }
+  header .eyebrow { font-size: 8px; letter-spacing: 1.2px; }
+  .connection-info { flex-wrap: nowrap; justify-content: space-between; gap: 5px; font-size: 10px; }
+  .connection-info button { min-height: 44px; padding: 6px 8px; font-size: 10px; }
+  .status { gap: 4px; }
+  .table-heading { font-size: 10px; margin: 0; }
+  .table-heading strong { letter-spacing: 1px; }
+  .table-stage { height: 630px; }
+  .table-stage .felt { inset: 7% 15% 9%; border-radius: 52px; border-width: 6px; }
+  .table-seat { width: 88px; }
+  .seat-cards { height: 47px; width: 64px; }
+  .seat-cards .card { width: 35px; height: 50px; }
+  .card-backs { height: 49px; }
+  .card-backs span { width: 35px; height: 48px; }
+  .card-backs span+span { margin-left: -7px; }
+  .nameplate { min-height: 48px; padding: 4px 6px; }
+  .nameplate strong { font-size: 11px; }
+  .seat-balance { font-size: 12px; }
+  .player-status { font-size: 8px; }
+  .dealer-marker { width: 18px; height: 18px; top: 36px; font-size: 10px; }
+  .board-content { left: -7%; right: -7%; top: 35%; }
+  .community-cards .card { width: 35px; height: 51px; }
+  .community-cards .cards { gap: 3px; flex-wrap: nowrap; }
+  .community-cards { height: 53px; }
+  .table-caption { font-size: 10px; }
+  .table-bet { font-size: 9px; gap: 3px; }
+  .table-bet i { width: 12px; height: 12px; border-width: 2px; }
+  .action-controls { position: relative; z-index: 5; display: block; padding: 10px; box-shadow: 0 -5px 18px #0003; }
+  .action-status { width: auto; display: flex; justify-content: space-between; gap: 10px; font-size: 11px; margin-bottom: 8px; }
+  .action-status span { font-size: 9px; margin: 0; text-align: right; }
+  .primary-actions { gap: 5px; }
+  .primary-actions button { font-size: 10px; padding: 8px 4px; letter-spacing: 0; }
+  .raise-editor { gap: 8px; margin-top: 8px; }
+  .raise-amount { font-size: 10px; gap: 5px; }
+  .raise-amount input { width: 66px; min-height: 44px; font-size: 16px; }
+  .raise-slider { min-height: 44px; }
+  .all-in-action { min-height: 44px; padding: 5px 9px; }
+  .between-controls { align-items: stretch; flex-direction: column; gap: 10px; }
+  .between-controls > button { min-height: 44px; }
+  .stack-editor { justify-content: space-between; }
+  .stack-editor label { flex: 1; }
+  .stack-editor input { width: 100%; min-height: 44px; font-size: 16px; }
+  .stack-editor button { min-height: 44px; }
+  .chat-panel input { font-size: 16px; min-height: 44px; }
+  .chat-panel button { min-height: 44px; }
+  .join { margin: 32px auto; padding: 24px; }
+  .join input { font-size: 16px; }
 }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+@media (max-width: 600px) {
+  .table-stage { height: max(530px, calc(100svh - 310px)); margin-bottom: 12px; }
+}
+@media (max-width: 600px) and (max-height: 760px) {
+  .action-controls { position: relative; }
+}
+
+@media (max-width: 600px) {
+  .seat-cards { height: 39px; width: 56px; }
+  .seat-cards .card { width: 30px; height: 43px; }
+  .card-backs { height: 41px; }
+  .card-backs span { width: 30px; height: 41px; }
+  .nameplate { min-height: 40px; line-height: 1.2; }
+  .dealer-marker { top: 32px; }
+}
+
+/* The reference uses a compact oval amount for each street bet. */
+.table-bet { background: #ccd56a; color: #25301d; border-radius: 50%; min-width: 36px; min-height: 25px; justify-content: center; padding: 2px 8px; }
+.table-bet i { display: none; }
+@media (max-width: 600px) { .table-bet { min-width: 25px; min-height: 18px; padding: 1px 5px; } }

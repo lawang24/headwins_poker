@@ -1,82 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import type { State } from "./types";
+import { ActionControls, type Action } from "./ActionControls";
+import { PokerTable } from "./PokerTable";
 
-type Player = {
-  id: string;
-  name: string;
-  stack: number;
-  connected: boolean;
-  in_hand: boolean;
-  folded: boolean;
-  committed: number;
-  all_in: boolean;
-};
-type State = {
-  players: Player[];
-  you: string;
-  host: string;
-  dealer: string;
-  actor: string | null;
-  street: string;
-  running: boolean;
-  board: string[];
-  hand: string[];
-  pot: number;
-  target: number;
-  small_blind: number;
-  big_blind: number;
-  min_raise_to: number;
-  max_raise_to: number;
-  can_raise: boolean;
-  call_amount: number;
-  hand_number: number;
-  history: string[];
-  result: null | {
-    payouts: Record<string, number>;
-    hands: Record<string, string[]>;
-  };
-};
-type Message = { type: string; amount?: number; text?: string };
-const assets = import.meta.glob(
-  [
-    "./assets/SVG-cards-1.3/*.svg",
-    "!./assets/SVG-cards-1.3/*2.svg",
-    "!./assets/SVG-cards-1.3/*joker.svg",
-  ],
-  { eager: true, query: "?url", import: "default" },
-) as Record<string, string>;
-const ranks: Record<string, string> = {
-  T: "10",
-  J: "jack",
-  Q: "queen",
-  K: "king",
-  A: "ace",
-};
-const suits: Record<string, string> = {
-  h: "hearts",
-  d: "diamonds",
-  c: "clubs",
-  s: "spades",
-};
-function Card({ code }: { code: string }) {
-  const name = `${ranks[code[0]] || code[0]}_of_${suits[code[1]]}`;
-  return (
-    <img
-      className="card"
-      src={assets[`./assets/SVG-cards-1.3/${name}.svg`]}
-      alt={name.replaceAll("_", " ")}
-    />
-  );
-}
-function Cards({ cards }: { cards: string[] }) {
-  return (
-    <div className="cards">
-      {cards.map((c) => (
-        <Card key={c} code={c} />
-      ))}
-    </div>
-  );
-}
 const sessionKey = "headwins:global";
 
 export default function App() {
@@ -90,10 +17,9 @@ export default function App() {
   const [status, setStatus] = useState("Offline");
   const [error, setError] = useState("");
   const [chat, setChat] = useState("");
-  const [raiseTo, setRaiseTo] = useState("");
-  const [stack, setStack] = useState("1000");
   const [pending, setPending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const log = useRef<HTMLDivElement | null>(null);
 
@@ -174,28 +100,17 @@ export default function App() {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [state?.history]);
 
-  const send = (msg: Message) => {
+  const send = (msg: Action) => {
     if (ws.current?.readyState !== WebSocket.OPEN) {
       setError("Wait until you reconnect.");
       return;
     }
     setError("");
-    if (msg.type === "raise") setRaiseTo("");
     setPending(true);
     ws.current.send(JSON.stringify(msg));
   };
   const me = state?.players.find((p) => p.id === state.you);
-  const myTurn = state?.actor === state?.you;
   const ready = status === "Connected" && !pending;
-  const eligible =
-    state?.players.filter((p) => p.connected && p.stack > 0).length || 0;
-  const raiseAmount = Number(raiseTo);
-  const validRaise =
-    state &&
-    Number.isInteger(raiseAmount) &&
-    raiseAmount > state.target &&
-    raiseAmount <= state.max_raise_to &&
-    (raiseAmount >= state.min_raise_to || raiseAmount === state.max_raise_to);
 
   return (
     <main className="app">
@@ -208,6 +123,7 @@ export default function App() {
           <span className={`status ${status === "Connected" ? "online" : ""}`}>
             {status}
           </span>
+          {joined && <button className="chat-toggle" aria-expanded={chatOpen} aria-controls="table-chat" onClick={() => setChatOpen(!chatOpen)}>{chatOpen ? "Close chat" : "Chat & log"}</button>}
           {joined && (
             <button
               onClick={() => {
@@ -251,7 +167,7 @@ export default function App() {
       {!joined ? (
         <section className="join panel">
           <p className="eyebrow">TAKE A SEAT</p>
-          <h2>Bring your poker face.</h2>
+          <h2>Join the table</h2>
           <p>
             Join this table with 1,000 play chips. Share the table link to play
             with friends.
@@ -300,211 +216,10 @@ export default function App() {
                   Blinds {state.small_blind} / {state.big_blind}
                 </span>
               </div>
-              <div className="felt">
-                <div className="pot-label">
-                  {state.running
-                    ? "IN THE POT"
-                    : state.street === "complete"
-                      ? "HAND COMPLETE"
-                      : "READY WHEN YOU ARE"}
-                </div>
-                <div className="pot">
-                  {state.running ? state.pot.toLocaleString() : "♠"}
-                </div>
-                {state.board.length ? (
-                  <Cards cards={state.board} />
-                ) : (
-                  <div className="board-placeholder">
-                    Community cards appear here
-                  </div>
-                )}
-                <p className="table-caption">
-                  {state.running
-                    ? `${state.players.find((p) => p.id === state.actor)?.name || "Table"} to act`
-                    : eligible < 2
-                      ? "Waiting for at least two players with chips"
-                      : "The host can deal the next hand"}
-                </p>
-              </div>
-              <div className="seats">
-                {state.players.map((p) => (
-                  <article
-                    key={p.id}
-                    className={`seat ${state.actor === p.id ? "acting" : ""} ${p.folded ? "folded" : ""}`}
-                  >
-                    <div className="seat-title">
-                      <strong>
-                        {p.name}
-                        {p.id === state.you ? " (you)" : ""}
-                      </strong>
-                      {p.id === state.dealer && (
-                        <span className="dealer" title="Dealer">
-                          D
-                        </span>
-                      )}
-                    </div>
-                    <div className="stack">
-                      {p.stack.toLocaleString()} <span>chips</span>
-                    </div>
-                    <div className="seat-meta">
-                      {!p.connected
-                        ? "Disconnected"
-                        : p.folded
-                          ? "Folded"
-                          : p.all_in && state.running
-                            ? "All-in"
-                            : state.actor === p.id
-                              ? "Thinking…"
-                              : !p.in_hand && state.running
-                                ? "Next hand"
-                                : p.id === state.host
-                                  ? "Table host"
-                                  : "Seated"}
-                      {state.running &&
-                        p.committed > 0 &&
-                        ` · Bet ${p.committed}`}
-                    </div>
-                    {state.result?.hands[p.id] && (
-                      <Cards cards={state.result.hands[p.id]} />
-                    )}
-                    {Boolean(state.result?.payouts[p.id]) && (
-                      <div className="payout">
-                        Received {state.result?.payouts[p.id]} chips
-                      </div>
-                    )}
-                  </article>
-                ))}
-              </div>
-              <section className="hand-controls panel">
-                <div>
-                  <p className="eyebrow">YOUR HAND</p>
-                  {state.hand.length ? (
-                    <Cards cards={state.hand} />
-                  ) : (
-                    <p className="hint">You’ll be dealt in next hand.</p>
-                  )}
-                </div>
-                <div className="controls">
-                  <h2>
-                    {state.running
-                      ? myTurn
-                        ? "Your move"
-                        : "Waiting for your turn"
-                      : "Between hands"}
-                  </h2>
-                  {state.running ? (
-                    <>
-                      <p className="hint">
-                        {myTurn
-                          ? state.call_amount
-                            ? `${state.call_amount} to call${me && state.call_amount === me.stack ? " (all-in)" : ""}`
-                            : "You can check"
-                          : "Actions unlock when it’s your turn."}
-                      </p>
-                      <div className="action-row">
-                        <button
-                          disabled={!ready || !myTurn}
-                          onClick={() => send({ type: "fold" })}
-                        >
-                          Fold
-                        </button>
-                        <button
-                          className="primary"
-                          disabled={!ready || !myTurn}
-                          onClick={() => send({ type: "check_call" })}
-                        >
-                          {state.call_amount
-                            ? `Call ${state.call_amount}`
-                            : "Check"}
-                        </button>
-                      </div>
-                      <form
-                        className="raise-row"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (validRaise)
-                            send({ type: "raise", amount: raiseAmount });
-                        }}
-                      >
-                        <label>
-                          Raise to (total chips)
-                          <input
-                            type="number"
-                            step="1"
-                            min={Math.min(
-                              state.min_raise_to,
-                              state.max_raise_to,
-                            )}
-                            max={state.max_raise_to}
-                            placeholder={`${Math.min(state.min_raise_to, state.max_raise_to)}`}
-                            value={raiseTo}
-                            onChange={(e) => setRaiseTo(e.target.value)}
-                            disabled={!ready || !myTurn || !state.can_raise}
-                          />
-                        </label>
-                        <button
-                          disabled={
-                            !ready || !myTurn || !state.can_raise || !validRaise
-                          }
-                        >
-                          Raise
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!ready || !myTurn || !state.can_raise}
-                          onClick={() =>
-                            send({ type: "raise", amount: state.max_raise_to })
-                          }
-                        >
-                          All-in
-                        </button>
-                      </form>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="primary"
-                        disabled={
-                          !ready || state.host !== state.you || eligible < 2
-                        }
-                        onClick={() => send({ type: "start" })}
-                      >
-                        Deal {state.hand_number ? "next" : "first"} hand
-                      </button>
-                      {state.host !== state.you && (
-                        <p className="hint">
-                          Waiting for{" "}
-                          {state.players.find((p) => p.id === state.host)?.name}
-                          , the table host.
-                        </p>
-                      )}
-                      <form
-                        className="raise-row"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          send({ type: "set_stack", amount: Number(stack) });
-                        }}
-                      >
-                        <label>
-                          Your play-chip stack
-                          <input
-                            type="number"
-                            min="0"
-                            max="1000000"
-                            step="1"
-                            required
-                            value={stack}
-                            onChange={(e) => setStack(e.target.value)}
-                          />
-                        </label>
-                        <button disabled={!ready}>Set stack</button>
-                      </form>
-                    </>
-                  )}
-                </div>
-              </section>
+              <PokerTable state={state} />
+              <ActionControls key={`${state.hand_number}:${state.street}:${state.actor}:${state.target}:${state.max_raise_to}`} state={state} ready={ready} send={send} />
             </section>
-            <aside className="panel chat-panel">
+            <aside id="table-chat" className={`panel chat-panel ${chatOpen ? "chat-open" : ""}`}>
               <h2>Table talk</h2>
               <div
                 className="log"
@@ -542,8 +257,7 @@ export default function App() {
           </div>
           <footer>
             Connected as {me?.name} · Disconnecting folds a live hand unless
-            you’re all-in. Refreshing restores your seat; a server restart
-            resets the table.
+            you’re all-in. Refreshing restores a retained seat. Play chips only.
           </footer>
         </>
       )}

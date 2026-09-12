@@ -8,7 +8,7 @@
     "Segoe UI",
     sans-serif;
   color: #eeeae0;
-  background: #101918;
+  background: #262626;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   font-weight: 400;
@@ -19,7 +19,7 @@
 }
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
 }
 button,
 input {
@@ -28,10 +28,10 @@ input {
 button {
   cursor: pointer;
   border: 1px solid #475851;
-  background: #25372f;
+  background: #393939;
   color: #f4f0e6;
   padding: 10px 15px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 600;
 }
 button:hover:not(:disabled) {
@@ -71,12 +71,12 @@ h2 {
   font-size: 19px;
 }
 button.primary {
-  background: #e2c074;
-  color: #1a261f;
-  border-color: #e2c074;
+  background: #389c65;
+  color: #fff;
+  border-color: #389c65;
 }
 button.primary:hover:not(:disabled) {
-  background: #f6d796;
+  background: #43af76;
 }
 .hint {
   color: #a3b5a9;

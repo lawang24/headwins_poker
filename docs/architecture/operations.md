@@ -59,6 +59,15 @@ failure behavior without AWS access. CloudFormation templates are checked with
 descriptions. [GitHub Actions](../../.github/workflows/checks.yml) runs the backend
 suite and frontend lint/build checks on pushes and pull requests.
 
+UI verification uses a separate memory-only backend (`DYNAMODB_TABLE` empty)
+and an explicitly configured development WebSocket URL. Compare reference and
+local screenshots at matching CSS viewport dimensions; check sparse and full
+tables, showdown card spacing, controls, chat, and reconnects. Browser viewport
+overrides may be affected by zoom, so verify `innerWidth` and `innerHeight`.
+The PokerNow public tutorial supplies visual references but does not expose all
+live-game controls or mobile keyboard behavior; those require a live reference
+and device validation before claiming exact parity.
+
 ## Local developer tooling
 
 The local development environment also has Agent Toolkit for AWS installed: AWS

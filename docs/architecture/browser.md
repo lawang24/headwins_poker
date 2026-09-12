@@ -7,8 +7,19 @@ It owns form and connection state; it does not decide game outcomes.
 
 ## State and rendering
 
-[App.tsx](../../frontend/src/App.tsx) handles name entry, table and card rendering,
-action controls, stack adjustments, chat, and connection recovery.
+[App.tsx](../../frontend/src/App.tsx) owns name entry, chat, pending actions, and
+connection recovery. [PokerTable.tsx](../../frontend/src/PokerTable.tsx) renders the
+felt, board, bets, and seats; it rotates the server ordering so the current player
+is at the bottom while preserving clockwise order. Desktop seats surround an oval;
+portrait layouts use two side rails with a gap for the board.
+[Cards.tsx](../../frontend/src/Cards.tsx) reuses the existing SVG assets. Opponents
+show card backs during play and only the server-provided result hands at showdown.
+[ActionControls.tsx](../../frontend/src/ActionControls.tsx) owns the raise and stack
+forms. Numeric and slider inputs share a draft, bounded by the server limits,
+including short all-in raises. The draft resets when the hand, street, actor,
+target, or maximum changes. Buttons disable while an action is pending or the
+connection is unavailable. Below 1024px, a header toggle opens chat/activity;
+phone controls remain in document flow so they cannot cover the bottom seat.
 [main.tsx](../../frontend/src/main.tsx) mounts the app. React stores the latest complete
 server snapshot alongside local form and connection state. Each new snapshot
 replaces the displayed game state and clears the pending action indicator.
