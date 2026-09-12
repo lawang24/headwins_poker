@@ -23,6 +23,15 @@ with WebSocket upgrade support, or configure an explicit backend URL at build
 time. HTTPS pages use secure WebSockets (`wss://`). The frontend and backend are
 separate serving concerns; FastAPI does not serve the built UI.
 
+Production serves the frontend at [larrypokernow.netlify.app](https://larrypokernow.netlify.app)
+and one Render backend at [headwins-poker.onrender.com](https://headwins-poker.onrender.com).
+The frontend's build-time WebSocket URL targets Render directly for both `/ws`
+and `/feedback`. Render starts Uvicorn in `backend/`; it does not load the local
+developer `.env`. Its backend environment selects the existing game and history
+tables in `us-east-1` and supplies a dedicated AWS access key. Without
+`DYNAMODB_TABLE`, the server starts in memory-only mode and rejects feedback,
+even though `/health` returns OK. Verify an actual saved record after deployment.
+
 Run **one backend worker**. The module-level `GameServer` contains a single
 live table, and separate workers would create conflicting games. With DynamoDB
 enabled, restarts recover durable checkpoints as described above; memory-only
@@ -54,12 +63,23 @@ tables, then restart the new backend. The first save upgrades the checkpoint;
 old binaries do not support schema 2. The source change itself does not activate
 history on an already-running deployment.
 
-The local installation uses the deployed `headwins-poker-data-game` and
-`headwins-poker-data-history` tables in `us-east-1`, selected by the ignored backend
-`.env`. The backend on port 8001 has completed startup and transactional writes
-with history enabled; the frontend runs on `127.0.0.1:5173`. These are local
-processes, not a publicly hosted application. They use the existing `lawang`
-developer login, which must be renewed when it expires.
+Production uses `headwins-poker-data-game` and `headwins-poker-data-history`
+in `us-east-1`. The [Render access template](../../infra/render-access.yaml)
+owns a dedicated IAM user in the `headwins-poker-render-access` stack. Its only
+permissions are `dynamodb:GetItem` and `dynamodb:PutItem` on these two tables,
+including the item actions used by transactions. It has no console login,
+table administration, bulk scan/query, deletion, or access to unrelated resources.
+The access key is managed outside CloudFormation and stored in Render's backend
+environment; it is never an infrastructure output or a frontend setting.
+Rotate by installing a second key in Render, redeploying and verifying persistence,
+then deactivating and removing the old key. Render-managed OIDC is a future
+alternative if the workspace has an eligible plan.
+
+Earlier local development used these same tables with the `lawang` developer
+login. Do not run a local backend against them while production is active: the
+single-writer checkpoint version guard would stop one of the processes. Use
+memory-only mode or the isolated DynamoDB emulator for local work. Renewing a
+developer login does not change Render's separate workload credential.
 
 ## Cost monitoring
 
@@ -125,7 +145,7 @@ Codex. The MCP connection uses the named `lawang` CLI profile; toolkit services
 use `us-east-1`. This is developer tooling, not an application dependency or a
 deployed service. The backend's boto3 connection is independent of the MCP tooling;
 [run.py](../../backend/run.py) loads ignored local `.env` settings for development.
-Production should supply environment settings and an IAM workload role with
+The production identity supplies environment settings and has
 `dynamodb:GetItem` and `dynamodb:PutItem` scoped to both table ARNs. DynamoDB
 transaction permissions use the underlying item actions; there is no standalone
 `dynamodb:TransactWriteItems` IAM action. Authorized offline exports additionally

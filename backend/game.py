@@ -24,6 +24,7 @@ class Player:
     id: str
     name: str
     token: str
+    seat: int = 0
     stack: int = 1000
     connected: bool = True
     hand: list = field(default_factory=list)
@@ -167,11 +168,50 @@ class Table:
             name,
             token if profile else uuid4().hex,
         )
+        p.seat = next(seat for seat in range(9) if all(q.seat != seat for q in self.players))
         self.players.append(p)
+        self.players.sort(key=lambda q: q.seat)
         self.register(p)
         self.enter_session(p)
         self.record("player_joined", player_id=p.id, name=p.name, stack=p.stack)
         return p
+
+    def move_seat(self, player_id, seat):
+        if self.running:
+            raise InvalidAction("Change seats between hands.")
+        if type(seat) is not int or not 0 <= seat < 9:
+            raise InvalidAction("Choose a seat from 1 to 9.")
+        p = self.player(player_id)
+        if not p.connected:
+            raise InvalidAction("Join the table before changing seats.")
+        if any(q.seat == seat for q in self.players):
+            raise InvalidAction("That seat is already occupied.")
+        previous = p.seat
+        p.seat = seat
+        self.players.sort(key=lambda q: q.seat)
+        self.record("seat_changed", player_id=p.id, previous_seat=previous, seat=seat)
+        self.log(f"{p.name} moved to seat {seat + 1}.")
+
+    def kick(self, player_id, target_id):
+        if self.running:
+            raise InvalidAction("Remove players between hands.")
+        if not self.player(player_id).connected:
+            raise InvalidAction("Join the table before removing players.")
+        target = next((p for p in self.players if p.id == target_id), None)
+        if target is None:
+            raise InvalidAction("That player is no longer at the table.")
+        if target.id == player_id:
+            raise InvalidAction("Use Leave table to leave your own seat.")
+        # Keep the dealer's predecessor so the next deal still moves clockwise.
+        if self.dealer == target.id:
+            index = self.players.index(target)
+            self.dealer = self.players[index - 1].id
+        if target.session_id == self.session_id and self.session_id:
+            self.record("chips_removed", player_id=target.id,
+                        amount=target.stack, reason="seat_removed")
+        self.players.remove(target)
+        self.record("seat_removed", player_id=target.id, removed_by=player_id)
+        self.log(f"{self.player(player_id).name} removed {target.name} from the table.")
 
     def clockwise(self, after, candidates):
         ids = [p.id for p in self.players]
@@ -504,6 +544,7 @@ class Table:
                 {
                     "id": q.id,
                     "name": q.name,
+                    "seat": q.seat,
                     "stack": q.stack,
                     "connected": q.connected,
                     "in_hand": q.in_hand,

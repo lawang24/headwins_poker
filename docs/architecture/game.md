@@ -19,7 +19,13 @@ automatic dealing when enabled and at least two connected players have chips.
 The engine owns blinds, dealer rotation, turn order, minimum raises, all-in
 eligibility, main/side pots, ties, and uncalled-chip returns. Chips are integers;
 players start with 1,000 and blinds are 5/10. Players can set their own stack
-between hands. Any connected player can change the shared lobby settings:
+between hands. Players have stable numbered seats; the engine keeps its player
+list sorted by seat for clockwise dealing and action order. Moves to empty seats
+and removal of other players are allowed only between hands. Removal records a
+cash-out and preserves the next dealer when removing the current dealer.
+Seat numbers are checkpointed; older checkpoints derive them from list order.
+Moves emit `seat_changed` events, and kicks attribute `seat_removed` to the requester.
+Any connected player can change the shared lobby settings:
 positive integer-unit blinds (SB ≤ BB ≤ 1,000,000), cents mode, and auto-deal.
 Blinds and cents can change only between hands; auto-deal can change during play.
 Cents mode denominates each integer unit as 0.01 instead of 1 for everyone;

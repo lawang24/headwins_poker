@@ -1,6 +1,7 @@
 export type Player = {
   id: string;
   name: string;
+  seat: number;
   stack: number;
   connected: boolean;
   in_hand: boolean;

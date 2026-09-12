@@ -51,7 +51,8 @@ def restore(payload):
     if data["schema"] not in {1, 2}:
         raise StorageError("Unsupported checkpoint schema.")
     table = Table()
-    table.players = [Player(**p) for p in data["players"]]
+    table.players = [Player(**{**p, "seat": p.get("seat", index)})
+                     for index, p in enumerate(data["players"])]
     for key in (
         "dealer",
         "hand_number",

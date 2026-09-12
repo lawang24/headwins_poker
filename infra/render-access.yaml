@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Dedicated Render backend identity for Headwins Poker checkpoint and feedback persistence.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@2
+  com.aws.cloudformation.Context:
+    ref: [../docs/architecture/operations.md]
+Parameters:
+  DataStackName:
+    Type: String
+    Default: headwins-poker-data
+    AllowedPattern: '[a-zA-Z][-a-zA-Z0-9]*'
+    Description: Existing data stack whose game and history tables this backend uses.
+Resources:
+  BackendUser:
+    Type: AWS::IAM::User
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Isolate the externally hosted backend from developer and account administrator credentials.
+        must:
+          - Permit only item reads and writes on the two existing poker tables.
+          - Do not create a console login or expose credentials in template outputs.
+    Properties:
+      UserName: !Sub '${AWS::StackName}-backend'
+      Tags:
+        - Key: Project
+          Value: headwins-poker
+      Policies:
+        - PolicyName: PokerPersistence
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DataStackName}-game'
+                  - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DataStackName}-history'
+Outputs:
+  BackendUserName:
+    Description: Dedicated identity whose access key is stored only in the Render backend environment.
+    Value: !Ref BackendUser
+  BackendUserArn:
+    Description: Identity used to audit and revoke production database access.
+    Value: !GetAtt BackendUser.Arn

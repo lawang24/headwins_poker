@@ -9,8 +9,11 @@ It owns form and connection state; it does not decide game outcomes.
 
 [App.tsx](../../frontend/src/App.tsx) owns name entry, chat, pending actions, and
 connection recovery. [PokerTable.tsx](../../frontend/src/PokerTable.tsx) renders the
-felt, board, bets, and seats; it rotates the server ordering so the current player
-is at the bottom while preserving clockwise order. Desktop seats surround an oval;
+felt, board, bets, and nine fixed numbered seats in server seat order. Empty seats
+are buttons that move the viewer between hands; occupied nameplates open a native
+modal with player details and a kick confirmation for other players. The modal
+supports Escape, traps focus, and restores focus when closed. Everyone sees the
+same seat positions, so moving changes both the visible position and dealing order. Desktop seats surround an oval;
 portrait layouts use two side rails with a gap for the board. The game shell in
 [App.css](../../frontend/src/App.css) fits the dynamic viewport: header, actions,
 and footer reserve their space while the table fills the remaining height. Seats
@@ -86,6 +89,9 @@ After a connection closes, the browser retries with exponential backoff capped a
 ten seconds. The token reclaims a retained seat or creates a new seat with the
 same permanent player ID after pruning. A second connection using the same token
 replaces the first; the old socket receives close code `4001` and stops retrying.
+A kicked socket receives `4002`: it clears the active tab token, stops retrying, and
+returns to the join screen with an explanation. The browser identity is retained
+so the player may explicitly join again; kicking is removal, not a permanent ban.
 
 Seat retention and the effect of disconnecting during a hand are described in
 [connections and sessions](connections.md#seat-lifecycle).

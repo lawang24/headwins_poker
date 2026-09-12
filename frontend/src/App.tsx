@@ -85,6 +85,16 @@ export default function App() {
       socket.onclose = (event) => {
         if (stopped) return;
         setPending(false);
+        if (event.code === 4002) {
+          stopped = true;
+          sessionStorage.removeItem(`${sessionKey}:token`);
+          setJoined(false);
+          setState(null);
+          setSettingsOpen(false);
+          setStatus("Offline");
+          setError("You were removed from the table.");
+          return;
+        }
         if (event.code === 4001) {
           setStatus("Seat opened elsewhere");
           setError(
@@ -229,7 +239,7 @@ export default function App() {
                   Blinds {formatAmount(state.small_blind, state.cents)} / {formatAmount(state.big_blind, state.cents)}
                 </span>
               </div>
-              <PokerTable state={state} />
+              <PokerTable state={state} ready={ready} send={send} />
               <ActionControls key={`${state.hand_number}:${state.street}:${state.actor}:${state.target}:${state.max_raise_to}:${state.cents}`} state={state} ready={ready} send={send} />
             </section>
             <aside id="table-chat" className={`panel chat-panel ${chatOpen ? "chat-open" : ""}`}>

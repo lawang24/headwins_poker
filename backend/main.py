@@ -217,6 +217,16 @@ async def websocket_endpoint(websocket: WebSocket):
                         server.table.set_settings(player.id, data.get("small_blind"),
                                                   data.get("big_blind"), data.get("auto_deal"),
                                                   data.get("cents"))
+                    elif kind == "move_seat":
+                        server.table.move_seat(player.id, data.get("seat"))
+                    elif kind == "kick":
+                        target_id = data.get("player_id")
+                        server.table.kick(player.id, target_id)
+                        # Persist removal before acknowledging it or closing the peer.
+                        await server.checkpoint()
+                        removed = server.sockets.pop(target_id, None)
+                        if removed:
+                            await server.close(removed, code=4002)
                     elif kind == "set_stack":
                         server.table.set_stack(player.id, data.get("amount"))
                     elif kind == "chat":

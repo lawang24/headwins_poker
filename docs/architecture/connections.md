@@ -43,10 +43,17 @@ All messages are JSON text over `/ws`. Clients join before sending game commands
 | Client → server | `raise` | `amount` is the total commitment for this street. |
 | Client → server | `set_stack` | `amount` sets the player’s stack between hands. |
 | Client → server | `settings` | Any joined player sets integer `small_blind`, `big_blind` and boolean `cents`, `auto_deal` for the lobby. |
+| Client → server | `move_seat` | `seat` is an integer 0–8; move to an empty seat between hands. |
+| Client → server | `kick` | `player_id` identifies another player to remove between hands. |
 | Client → server | `chat` | `text` contains 1–300 characters after trimming. |
 | Server → client | `session` | `id` is the stable player ID; `token` is its browser credential. |
 | Server → client | `state` | `state` contains that player’s complete table view. |
 | Server → client | `error` | `message` explains an invalid request. |
+
+Each public player includes a zero-based `seat`. Moves and kicks validate under
+the same lock as betting. Kicks save the removal before detaching and closing the
+target socket with `4002`, then broadcast the remaining table. A stale socket
+cannot send further commands or disconnect a replacement in its cleanup.
 
 Snapshots include shared `small_blind`, `big_blind`, `cents`, and `auto_deal`.
 Settings requests validate all fields before mutation, and use the same lock,
@@ -66,7 +73,15 @@ eligible for the pot. Reconnection does not undo a fold. Seats are retained duri
 hands to preserve order; a new join between hands prunes disconnected seats.
 Pruning records a cash-out. A retained seat keeps its chips on reconnect; a pruned
 seat starts with 1,000 again under the same player ID, recorded as a new chip entry.
-There is no host role or privileged seat.
+There is no host role or privileged seat. Any connected player can remove another
+player between hands, including a disconnected player. Removal cashes out the
+remaining stack and frees the seat; it does not ban the identity. The removed
+player can explicitly join again with a fresh 1,000-chip entry.
+
+Seats have stable numbers 0–8. A new player takes the first free seat and can
+click another empty seat to move between hands. Retained-seat reconnects preserve
+the seat number. Occupied seats cannot be taken or swapped, and neither moving
+nor kicking is allowed during a hand.
 
 A table session opens on the first join and closes when everyone disconnects or
 on restart. Reconnecting within an open session does not add another buy-in.

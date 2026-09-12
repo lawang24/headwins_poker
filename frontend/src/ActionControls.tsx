@@ -2,7 +2,7 @@ import { useState } from "react";
 import { formatAmount, inputAmount, parseAmount } from "./amounts";
 import type { State } from "./types";
 
-export type Action = { type: string; amount?: number; text?: string; small_blind?: number; big_blind?: number; auto_deal?: boolean; cents?: boolean };
+export type Action = { type: string; seat?: number; player_id?: string; amount?: number; text?: string; small_blind?: number; big_blind?: number; auto_deal?: boolean; cents?: boolean };
 
 export function ActionControls({ state, ready, send }: {
   state: State; ready: boolean; send: (action: Action) => void;

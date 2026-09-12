@@ -1,7 +1,8 @@
 # How Headwins Poker works
 
 Headwins Poker is a browser-based, play-money Texas Hold’em app for two to nine
-players at one shared table, with no host or privileged seat. Anyone at the table can configure shared blinds, cents denominations, and automatic
+players at one shared table, with nine fixed seats and no host or privileged seat.
+Between hands, players can move to empty seats or remove another player. Anyone at the table can configure shared blinds, cents denominations, and automatic
 next-hand dealing from Settings. The browser shows the game and sends player actions;
 the backend owns the rules, chips, and authoritative state.
 

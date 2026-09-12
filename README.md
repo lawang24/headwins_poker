@@ -160,6 +160,23 @@ npm run build
 
 GitHub Actions runs the backend regression suite and frontend lint/build on pushes and pull requests. Tests cover complete hands, turn order, invalid requests, private cards, chip accounting, folded players, all-ins, ties, side pots, disconnects, sessions, the single shared game, and randomized legal play.
 
+### Seating checks
+
+Click an empty numbered seat to move, or a player's nameplate to open the kick
+confirmation. Anyone seated can remove another player. Both actions are available
+between hands. Kicking cashes out the player and returns them to the join screen;
+they can join again manually.
+
+After installing the browser test dependencies below, run the isolated seating check:
+
+```sh
+PYTHONPATH=.artifacts/e2e/deps backend/venv/bin/python backend/e2e/seating_test.py
+```
+
+It uses local ports 18800 and 15173, in-memory game state, and disposable Chrome
+profiles. It checks moving, reconnecting, kicking, live-hand restrictions, and
+desktop/mobile layouts; screenshots go to `.artifacts/seating/`.
+
 ### Browser end-to-end tests
 
 After installing the normal backend and frontend dependencies, run from the
@@ -205,6 +222,34 @@ Build the frontend with `npm run build` and serve `frontend/dist`. Proxy `/ws` t
 This implementation is for casual play-money games. Memory-only mode loses state on restart; DynamoDB mode recovers the saved table. Everyone who opens the app joins the same game; there is no room selection, password, or account system. Account authentication, a history/equity UI, distributed workers, and public-service abuse controls are separate work; no real-money settlement is implemented.
 
 ### Feedback
+
+Production uses the Netlify frontend at `https://larrypokernow.netlify.app` and
+the Render backend at `https://headwins-poker.onrender.com`. Set the frontend's
+`VITE_WS_URL` to `wss://headwins-poker.onrender.com/ws` when building it. The
+Render backend needs these environment settings (its Uvicorn command does not
+load the local `.env`):
+
+| Setting | Production value |
+| --- | --- |
+| `DYNAMODB_TABLE` | `headwins-poker-data-game` |
+| `DYNAMODB_HISTORY_TABLE` | `headwins-poker-data-history` |
+| `AWS_REGION` | `us-east-1` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Dedicated backend credential, stored only in Render |
+
+Provision the backend identity separately from the retained data tables:
+
+```sh
+aws cloudformation deploy --profile lawang --region us-east-1 \
+  --stack-name headwins-poker-render-access \
+  --template-file infra/render-access.yaml --capabilities CAPABILITY_NAMED_IAM
+```
+
+Create an access key for the resulting backend user and transfer it securely to
+Render without printing it or committing it. Preserve existing Render variables
+when configuring the service, then redeploy. Verify `/health`, submit a labeled
+feedback report, and confirm the report appears in the history export. A healthy
+HTTP endpoint alone does not prove storage is enabled. Use separate tables or the
+emulator for local development while production owns these tables.
 
 The corner Feedback button is available before joining, at the table, and in
 Settings. Reports are stored privately in `DYNAMODB_HISTORY_TABLE`, with a server

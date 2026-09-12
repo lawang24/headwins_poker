@@ -570,3 +570,14 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
     .app-table .dealer-marker { top: -8px; }
   }
 }
+
+/* Fixed seats retain their location as people join, leave, or move. */
+button.nameplate { text-align: left; border: 1px solid transparent; cursor: pointer; }
+button.nameplate:hover, button.nameplate:focus-visible { border-color: #ddd; }
+.empty-seat { white-space: nowrap; width: auto !important; min-width: 68px; min-height: 36px; padding: 6px 10px; border: 1px dashed #aaa8; border-radius: 18px; background: #252525b8; color: #ddd; font-size: 12px; }
+.empty-seat span { margin-right: 4px; }
+.empty-seat:disabled { opacity: .45; }
+.player-modal h2 { overflow-wrap: anywhere; }
+.player-modal .danger { background: #933d3d; color: white; }
+
+.seat-cards { pointer-events: none; }
