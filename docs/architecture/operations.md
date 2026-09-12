@@ -84,7 +84,10 @@ sessions, invalid messages, and the single shared game using in-process clients.
 failure behavior without AWS access. CloudFormation templates are checked with
 `cfn-lint`; live deployment is verified through stack events and table/budget
 descriptions. [GitHub Actions](../../.github/workflows/checks.yml) runs the backend
-suite and frontend lint/build checks on pushes and pull requests.
+suite and frontend clean-install/lint/build checks on pushes and pull requests.
+The frontend [npm configuration](../../frontend/.npmrc) enables normal peer-dependency
+resolution, overriding user-level legacy settings. Validate the committed lockfile
+with `npm ci` before lint/build so local dependency checks match CI.
 [History tests](../../backend/tests/test_history.py) validate event capture,
 identity, accounting, migration, and transactional failure behavior offline.
 
