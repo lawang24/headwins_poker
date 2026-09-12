@@ -35,6 +35,7 @@ def json_number(value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--feedback", action="store_true")
     group.add_argument("--sessions", action="store_true")
     group.add_argument("--system", action="store_true")
     group.add_argument("--session")
@@ -52,7 +53,9 @@ def main():
     if store is None:
         raise StorageError("Configure DynamoDB to export permanent history.")
     partition = (
-        "SYSTEM"
+        "FEEDBACK"
+        if args.feedback
+        else "SYSTEM"
         if args.system
         else "SESSIONS"
         if args.sessions

@@ -126,7 +126,7 @@ def set_stack(page, amount):
     )
 
 
-def run():
+def run(feedback_only=False):
     for filename in ("report.json", "player-export.json"):
         (OUT / filename).unlink(missing_ok=True)
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -226,6 +226,47 @@ def run():
                 contexts.append(c)
                 return c
 
+            if feedback_only:
+                guest = context().new_page()
+                guest.goto(url)
+                for width, height in [(1440, 1000), (390, 844)]:
+                    guest.set_viewport_size({"width": width, "height": height})
+                    button = guest.get_by_role("button", name="Feedback", exact=True)
+                    expect(button).to_be_in_viewport()
+                    button.click()
+                    expect(guest.get_by_role("dialog")).to_be_visible()
+                    guest.get_by_role("dialog").get_by_label("Reporter name").fill("Guest reporter")
+                    guest.get_by_label("Feedback", exact=True).fill("Guest feedback")
+                    guest.screenshot(path=str(OUT / f"feedback-{width}.png"))
+                    guest.keyboard.press("Escape")
+                    expect(button).to_be_focused()
+                button.click()
+                expect(guest.get_by_label("Feedback", exact=True)).to_have_value("Guest feedback")
+                guest.get_by_role("button", name="Send feedback").click()
+                expect(guest.get_by_text("Thanks! Your feedback has been saved.")).to_be_visible()
+                guest.get_by_role("button", name="Done", exact=True).click()
+                player = join(context(), "Feedback player", url)
+                player.get_by_role("button", name="Settings", exact=True).click()
+                player.get_by_role("button", name="Feedback", exact=True).click()
+                player.get_by_label("Reporter name").fill("Spoofed name")
+                player.get_by_label("Feedback", exact=True).fill("Player feedback")
+                player.get_by_role("button", name="Send feedback").click()
+                expect(player.get_by_text("Thanks! Your feedback has been saved.")).to_be_visible()
+                records = list(query_records(history, "FEEDBACK"))
+                assert len(records) == 2
+                assert records[0]["reporter_type"] == "guest"
+                assert records[1]["reporter_name"] == "Feedback player"
+                assert records[1]["player_id"] == state(player)["you"]
+                exported = OUT / "feedback-export.json"
+                exported.unlink(missing_ok=True)
+                subprocess.run([str(APP_PYTHON), "export_history.py", "--feedback", "--output", str(exported)], cwd=ROOT / "backend", env=env, check=True)
+                assert json.loads(exported.read_text()) == records
+                assert exported.stat().st_mode & 0o777 == 0o600
+                assert not errors, errors
+                check("Feedback: desktop/mobile modal, focus, draft, guest/player persistence, settings, private export")
+                browser.close()
+                return
+
             ca, cb = context(), context()
             a = join(ca, "E2E Alice", url)
             aid = state(a)["you"]
@@ -233,8 +274,8 @@ def run():
             b = join(cb, "E2E Bob", url)
             bid = state(b)["you"]
             wait(a, "window.__e2e.state.players.length === 2")
-            expect(b.get_by_role("button", name="Deal first hand")).to_be_disabled()
-            check("Separate browser identities, shared table, and host-only dealing")
+            expect(b.get_by_role("button", name="Deal first hand")).to_be_enabled()
+            check("Separate browser identities, shared table, and dealing from either seat")
             a.get_by_label("Chat message").fill("E2E persistent chat")
             a.get_by_role("button", name="Send", exact=True).click()
             expect(b.get_by_role("log")).to_contain_text("E2E persistent chat")
@@ -529,4 +570,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    run(feedback_only="--feedback-only" in sys.argv)

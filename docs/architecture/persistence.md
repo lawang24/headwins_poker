@@ -18,7 +18,10 @@ boto3 calls run off the event loop while game changes remain ordered by one lock
 The existing checkpoint table keeps its string partition key `pk=GAME#GLOBAL`,
 with increasing `version` and a compressed binary JSON `payload`. Schema 2 adds
 session/hand IDs, starting-hand data, and the event sequence to the existing
-players, chips, board, result, blinds, and recent display log. It remains bounded.
+players, chips, board, result, blinds, and recent display log. Shared cents and
+auto-deal settings are also saved, defaulting to false for older checkpoints.
+The pending auto-deal timer is transient and is recreated only when eligible
+players reconnect to a completed hand. The checkpoint remains bounded.
 
 The history table has string `pk` and `sk` keys. It has no secondary indexes,
 streams, or TTL. Events and summaries retain data indefinitely; profiles can
@@ -26,6 +29,7 @@ update their display names but never change their associated player ID.
 
 | Read/write need | Partition key | Sort key | Contents |
 | --- | --- | --- | --- |
+| Read private feedback chronologically | `FEEDBACK` | `<UTC-timestamp>#<report-id>` | Message, server timestamp, reporter name/type and nullable player ID. |
 | Resolve returning browser identity | `IDENTITY#<sha256(token)>` | `PROFILE` | Stable player ID and display name; no raw token. |
 | Read player profile | `PLAYER#<id>` | `PROFILE` | Stable player ID and display name. |
 | Discover session boundaries | `SESSIONS` | `<timestamp>#<sequence>` | Start/end or legacy-import event. |
@@ -49,6 +53,24 @@ independent of total history. Payloads have a 350,000-byte compressed guard and
 transactions a 100-item guard. DynamoDB also enforces its aggregate transaction
 size limit; a rejected save stops play. Session and player partitions grow with
 use; this design targets one casual shared table, not distributed high-volume play.
+
+## Feedback storage
+
+[feedback.py](../../backend/feedback.py) validates reports and resolves existing
+browser identities without joining a seat. It generates the report ID and UTC
+timestamp on the server, then calls `DynamoStore.save_feedback` to write one record
+to the history table. Guest names are self-reported and have no player ID; supplied
+browser identities must resolve to a retained seat or durable profile. Submitted
+names cannot override an identified player's name. Records contain no reconnect
+credentials and never enter game state, chat, checkpoints, or broadcasts.
+
+Feedback writes are independent of game transactions and remain available if play
+has stopped after a checkpoint failure, provided the history store works. Missing
+storage, lookup failures, and failed/uncertain writes return errors without claiming
+success or stopping play. An uncertain write may have committed; a manual resubmission
+can create a duplicate. Memory-only mode does not accept feedback. Records have no
+TTL and can be read privately with `export_history.py --feedback` using the existing
+paginated export and owner-only output file.
 
 ## Sessions, identity, and accounting
 

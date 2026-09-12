@@ -38,6 +38,8 @@ def snapshot(table):
             "street": table.street,
             "small_blind": table.small_blind,
             "big_blind": table.big_blind,
+            "auto_deal": table.auto_deal,
+            "cents": table.cents,
         },
         separators=(",", ":"),
         ensure_ascii=False,
@@ -61,6 +63,8 @@ def restore(payload):
         "big_blind",
     ):
         setattr(table, key, data[key])
+    table.auto_deal = data.get("auto_deal", False)
+    table.cents = data.get("cents", False)
     table.session_id = data.get("session_id")
     table.hand_id = data.get("hand_id")
     table.hand_start = data.get("hand_start")
@@ -157,6 +161,15 @@ class DynamoStore:
         return self.history_table.get_item(
             Key={"pk": f"IDENTITY#{digest}", "sk": "PROFILE"}, ConsistentRead=True
         ).get("Item")
+
+    def save_feedback(self, record):
+        if self.history_table is None:
+            raise StorageError("Feedback storage is unavailable.")
+        self.history_table.put_item(Item={
+            "pk": "FEEDBACK",
+            "sk": f"{record['created_at']}#{record['id']}",
+            **record,
+        })
 
     def save(self, payload, events=(), profiles=None):
         if payload == self.last_payload and not events and not profiles:

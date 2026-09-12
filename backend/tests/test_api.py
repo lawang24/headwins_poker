@@ -43,7 +43,7 @@ class WebSocketTests(unittest.TestCase):
             with self.client.websocket_connect("/ws?room=beta") as b:
                 _, state = self.join(b, "Bob")
                 self.assertEqual(len(state["players"]), 2)
-                self.assertEqual(state["host"], session["id"])
+                self.assertNotIn("host", state)
                 self.assertEqual(len(a.receive_json()["state"]["players"]), 2)
                 a.send_json({"type": "start"})
                 aa, bb = a.receive_json()["state"], b.receive_json()["state"]
@@ -58,10 +58,6 @@ class WebSocketTests(unittest.TestCase):
                 sb, _ = self.join(b, "Bob")
                 a.receive_json()
                 b.send_json({"type": "start"})
-                self.assertEqual(b.receive_json()["type"], "error")
-                a.receive_json()
-                b.receive_json()
-                a.send_json({"type": "start"})
                 aa, bb = a.receive_json()["state"], b.receive_json()["state"]
                 self.assertNotEqual(aa["hand"], bb["hand"])
                 b.send_json({"type": "fold"})

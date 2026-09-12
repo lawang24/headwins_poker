@@ -1,5 +1,18 @@
 # Project instructions
 
+## Offer a demo after edits
+
+- After making any edit in this repository, ask the user whether they want the
+  change demoed.
+
+## Verify UI changes in the browser
+
+- After any UI change, open the app in the browser and inspect the affected
+  screens at both mobile and desktop viewport sizes before finishing.
+- Check layout, readability, overflow, and interactions at both sizes. Fix any
+  issues found and recheck the result. Report the viewport sizes checked and
+  any verification limitations in the completion summary.
+
 ## Keep the architecture documentation current
 
 - Read [docs/architecture.md](docs/architecture.md) before changing the app.

@@ -9,6 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from game import Table, InvalidAction
 from storage import DynamoStore, StorageError, snapshot
 from fastapi.responses import JSONResponse
+from feedback import feedback_connection
 
 
 @asynccontextmanager
@@ -18,7 +19,12 @@ async def lifespan(app):
     if server.store:
         server.table = await asyncio.to_thread(server.store.load)
         await server.checkpoint()
-    yield
+    try:
+        yield
+    finally:
+        if server.deal_task:
+            server.deal_task.cancel()
+            await asyncio.gather(server.deal_task, return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -31,6 +37,32 @@ class GameServer:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     store: object = None
     failed: bool = False
+    deal_task: asyncio.Task | None = None
+    auto_deal_delay: float = 5
+
+    def can_auto_deal(self):
+        return (not self.failed and self.table.auto_deal
+                and self.table.street == "complete"
+                and sum(p.connected and p.stack > 0 for p in self.table.players) >= 2)
+
+    def schedule_deal(self):
+        if not self.can_auto_deal():
+            if self.deal_task:
+                self.deal_task.cancel()
+                self.deal_task = None
+        elif self.deal_task is None:
+            self.deal_task = asyncio.create_task(self.deal_next())
+
+    async def deal_next(self):
+        try:
+            await asyncio.sleep(self.auto_deal_delay)
+            async with self.lock:
+                self.deal_task = None
+                if self.can_auto_deal():
+                    self.table.start(next(p.id for p in self.table.players if p.connected))
+                    await self.broadcast()
+        except StorageError:
+            pass
 
     async def checkpoint(self):
         if self.failed:
@@ -115,6 +147,8 @@ class GameServer:
             await asyncio.gather(*(self.close(socket) for _, socket in failures))
             await self.checkpoint()
 
+        self.schedule_deal()
+
 
 server = GameServer()
 
@@ -179,6 +213,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         server.table.start(player.id)
                     elif kind in {"fold", "check_call", "raise"}:
                         server.table.act(player.id, kind, data.get("amount"))
+                    elif kind == "settings":
+                        server.table.set_settings(player.id, data.get("small_blind"),
+                                                  data.get("big_blind"), data.get("auto_deal"),
+                                                  data.get("cents"))
                     elif kind == "set_stack":
                         server.table.set_stack(player.id, data.get("amount"))
                     elif kind == "chat":
@@ -220,3 +258,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     await server.broadcast()
                 except StorageError:
                     pass
+
+
+@app.websocket("/feedback")
+async def feedback_endpoint(websocket: WebSocket):
+    await feedback_connection(websocket, server)

@@ -4,6 +4,10 @@ import type { State } from "./types";
 import { ActionControls, type Action } from "./ActionControls";
 import { PokerTable } from "./PokerTable";
 
+import { Feedback } from "./Feedback";
+import { Settings } from "./Settings";
+import { formatAmount } from "./amounts";
+
 const sessionKey = "headwins:global";
 
 export default function App() {
@@ -19,6 +23,7 @@ export default function App() {
   const [chat, setChat] = useState("");
   const [pending, setPending] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const log = useRef<HTMLDivElement | null>(null);
@@ -115,7 +120,7 @@ export default function App() {
   const ready = status === "Connected" && !pending;
 
   return (
-    <main className="app">
+    <main className={`app ${joined && state && !settingsOpen ? "app-table" : ""}`}>
       <header>
         <div>
           <p className="eyebrow">PLAY MONEY • NO-LIMIT HOLD’EM</p>
@@ -125,10 +130,12 @@ export default function App() {
           <span className={`status ${status === "Connected" ? "online" : ""}`}>
             {status}
           </span>
+          {state && <button aria-pressed={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>{settingsOpen ? "Table" : "Settings"}</button>}
           {joined && <button className="chat-toggle" aria-expanded={chatOpen} aria-controls="table-chat" onClick={() => setChatOpen(!chatOpen)}>{chatOpen ? "Close chat" : "Chat & log"}</button>}
           {joined && (
             <button
               onClick={() => {
+                setSettingsOpen(false);
                 setJoined(false);
                 setState(null);
                 setStatus("Offline");
@@ -157,6 +164,7 @@ export default function App() {
             {copied ? "Link copied" : "Invite friends"}
           </button>
         </div>
+        <Feedback name={me?.name || name} />
       </header>
       {error && (
         <div role="alert" className="error">
@@ -208,6 +216,8 @@ export default function App() {
             happen automatically.
           </p>
         </section>
+      ) : settingsOpen ? (
+        <Settings key={`${state.small_blind}:${state.big_blind}:${state.cents}:${state.auto_deal}:${state.running}`} state={state} ready={ready} send={send} back={() => setSettingsOpen(false)} />
       ) : (
         <>
           <div className="game-layout">
@@ -216,11 +226,11 @@ export default function App() {
                 <span>Hand #{state.hand_number}</span>
                 <strong>{state.street}</strong>
                 <span>
-                  Blinds {state.small_blind} / {state.big_blind}
+                  Blinds {formatAmount(state.small_blind, state.cents)} / {formatAmount(state.big_blind, state.cents)}
                 </span>
               </div>
               <PokerTable state={state} />
-              <ActionControls key={`${state.hand_number}:${state.street}:${state.actor}:${state.target}:${state.max_raise_to}`} state={state} ready={ready} send={send} />
+              <ActionControls key={`${state.hand_number}:${state.street}:${state.actor}:${state.target}:${state.max_raise_to}:${state.cents}`} state={state} ready={ready} send={send} />
             </section>
             <aside id="table-chat" className={`panel chat-panel ${chatOpen ? "chat-open" : ""}`}>
               <h2>Table talk</h2>

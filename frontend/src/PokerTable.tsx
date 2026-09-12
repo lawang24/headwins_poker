@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { formatAmount } from "./amounts";
 import { Cards } from "./Cards";
 import type { Player, State } from "./types";
 
@@ -27,11 +28,11 @@ function Seat({ player, state, index, count }: {
   const payout = state.result?.payouts[player.id] || 0;
   const label = !player.connected ? "Disconnected" : player.folded ? "Folded"
     : player.all_in && state.running ? "All-in" : acting ? "To act"
-    : !player.in_hand && state.running ? "Next hand" : mine ? "You" : player.id === state.host ? "Host" : "";
+    : !player.in_hand && state.running ? "Next hand" : mine ? "You" : "";
   return <article
     className={`table-seat ${mine ? "is-you" : ""} ${acting ? "is-acting" : ""} ${player.folded ? "is-folded" : ""} ${!player.connected ? "is-disconnected" : ""} ${payout ? "is-winner" : ""}`}
     style={{ "--seat-x": `${x}%`, "--seat-y": `${y}%`, "--mobile-x": `${mx}%`, "--mobile-y": `${my}%` } as CSSProperties}
-    aria-label={`${player.name}${mine ? ", you" : ""}, ${player.stack} chips${label ? `, ${label}` : ""}`}
+    aria-label={`${player.name}${mine ? ", you" : ""}, ${formatAmount(player.stack, state.cents)} chips${label ? `, ${label}` : ""}`}
   >
     <div className="seat-body">
       <div className="seat-cards">
@@ -39,11 +40,11 @@ function Seat({ player, state, index, count }: {
       </div>
       <div className="nameplate">
         <strong title={player.name}>{player.name}</strong>
-        <span className="seat-balance">{player.stack.toLocaleString()}</span>
+        <span className="seat-balance">{formatAmount(player.stack, state.cents)}</span>
         <span className="player-status">{label || "Seated"}</span>
       </div>
       {player.id === state.dealer && <span className="dealer-marker" title="Dealer" aria-label="Dealer">D</span>}
-      {payout > 0 && <span className="seat-payout">+{payout.toLocaleString()}</span>}
+      {payout > 0 && <span className="seat-payout">+{formatAmount(payout, state.cents)}</span>}
     </div>
   </article>;
 }
@@ -55,7 +56,7 @@ export function PokerTable({ state }: { state: State }) {
   return <div className="table-stage" data-player-count={players.length}>
     <div className="felt">
       <div className="board-content">
-        <div className="pot" aria-label={`Pot ${state.pot} chips`}><span>Pot</span> {state.pot.toLocaleString()}</div>
+        <div className="pot" aria-label={`Pot ${formatAmount(state.pot, state.cents)} chips`}><span>Pot</span> {formatAmount(state.pot, state.cents)}</div>
         <div className="community-cards">
           <Cards cards={state.board} />
         </div>
@@ -67,7 +68,7 @@ export function PokerTable({ state }: { state: State }) {
     {players.map((player, index) => {
       const angle = index * Math.PI * 2 / Math.max(players.length, 2);
       const [mx, my] = portraitPosition(index, players.length);
-      return state.running && player.committed > 0 ? <div key={player.id} className="table-bet" style={{left: `${50 - 28 * Math.sin(angle)}%`, top: `${50 + 24 * Math.cos(angle)}%`, "--mobile-bet-x": `${50 + (mx - 50) * .58}%`, "--mobile-bet-y": `${my + (my < 50 ? 8 : -3)}%`} as CSSProperties} aria-label={`${player.name} bet ${player.committed}`}><i aria-hidden="true" />{player.committed.toLocaleString()}</div> : null;
+      return state.running && player.committed > 0 ? <div key={player.id} className="table-bet" style={{left: `${50 - 28 * Math.sin(angle)}%`, top: `${50 + 24 * Math.cos(angle)}%`, "--desktop-bet-x": `${50 - 28 * Math.sin(angle)}%`, "--desktop-bet-y": `${50 + 24 * Math.cos(angle)}%`, "--mobile-bet-x": `${50 + (mx - 50) * .58}%`, "--mobile-bet-y": `${players.length === 2 ? (index === 0 ? 76 : 27) : my + (my < 50 ? 8 : -3)}%`} as CSSProperties} aria-label={`${player.name} bet ${formatAmount(player.committed, state.cents)}`}><i aria-hidden="true" />{formatAmount(player.committed, state.cents)}</div> : null;
     })}
   </div>;
 }

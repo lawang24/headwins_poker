@@ -15,7 +15,7 @@ class PokerTests(unittest.TestCase):
 
     def test_blinds_and_positions(self):
         t = self.table()
-        t.start(t.host)
+        t.start(t.players[0].id)
         a, b, c = t.players
         self.assertEqual(t.dealer, a.id)
         self.assertEqual(t.actor, a.id)
@@ -26,7 +26,7 @@ class PokerTests(unittest.TestCase):
     def test_heads_up_and_dealer_rotation(self):
         t = self.table((100, 100))
         a, b = t.players
-        t.start(t.host)
+        t.start(t.players[0].id)
         self.assertEqual(t.actor, a.id)
         self.assertEqual(a.committed, 5)
         t.act(a.id, "check_call")
@@ -34,7 +34,7 @@ class PokerTests(unittest.TestCase):
         self.assertEqual(t.street, "flop")
         self.assertEqual(t.actor, b.id)
         t.act(b.id, "fold")
-        t.start(t.host)
+        t.start(t.players[0].id)
         self.assertEqual(t.dealer, b.id)
         self.assertEqual(t.actor, b.id)
 
@@ -42,12 +42,12 @@ class PokerTests(unittest.TestCase):
         for stacks in [(), (100,), (100, 0)]:
             t = self.table(stacks)
             with self.assertRaises(InvalidAction):
-                t.start(t.host)
+                t.start(t.players[0].id if t.players else None)
             self.assertEqual(t.street, "waiting")
 
     def test_full_hand_all_streets_and_big_blind_option(self):
         t = self.table()
-        t.start(t.host)
+        t.start(t.players[0].id)
         for _ in range(2):
             t.act(t.actor, "check_call")
         self.assertEqual(t.street, "preflop")
@@ -62,7 +62,7 @@ class PokerTests(unittest.TestCase):
 
     def test_out_of_turn_and_invalid_bets_are_atomic(self):
         t = self.table()
-        t.start(t.host)
+        t.start(t.players[0].id)
         before = t.state(t.actor)
         for action in ["fold", "check_call", "raise"]:
             with self.assertRaises(InvalidAction):
@@ -74,7 +74,7 @@ class PokerTests(unittest.TestCase):
 
     def test_folded_player_never_gets_turn_again(self):
         t = self.table((200,) * 4)
-        t.start(t.host)
+        t.start(t.players[0].id)
         folded = t.actor
         t.act(folded, "fold")
         t.act(t.actor, "raise", 30)
@@ -85,7 +85,7 @@ class PokerTests(unittest.TestCase):
 
     def test_last_fold_pays_and_waits(self):
         t = self.table((100, 100))
-        t.start(t.host)
+        t.start(t.players[0].id)
         t.act(t.actor, "fold")
         self.assertEqual(t.street, "complete")
         self.assertEqual(t.pot, 0)
@@ -94,14 +94,14 @@ class PokerTests(unittest.TestCase):
 
     def test_all_in_automatic_runout(self):
         t = self.table((5, 8))
-        t.start(t.host)
+        t.start(t.players[0].id)
         self.assertEqual(t.street, "complete")
         self.assertEqual(len(t.board), 5)
         self.assertEqual(self.total(t), 13)
 
     def test_short_big_blind_does_not_force_uncalled_chips(self):
         t = self.table((100, 8))
-        t.start(t.host)
+        t.start(t.players[0].id)
         self.assertEqual(t.state(t.actor)["call_amount"], 3)
         t.act(t.actor, "check_call")
         self.assertEqual(t.street, "complete")
@@ -110,7 +110,7 @@ class PokerTests(unittest.TestCase):
 
     def test_short_all_in_does_not_reopen_raise(self):
         t = self.table((100, 15, 100))
-        t.start(t.host)
+        t.start(t.players[0].id)
         a, b, c = t.players
         t.act(a.id, "check_call")
         t.act(b.id, "raise", 15)
@@ -124,7 +124,7 @@ class PokerTests(unittest.TestCase):
 
     def test_cumulative_short_all_ins_reopen(self):
         t = self.table((15, 20, 100, 100))
-        t.start(t.host)
+        t.start(t.players[0].id)
         a, b, c, d = t.players
         self.assertEqual(t.actor, d.id)
         t.act(d.id, "check_call")
@@ -166,7 +166,7 @@ class PokerTests(unittest.TestCase):
 
     def test_disconnect_and_reconnect(self):
         t = self.table()
-        t.start(t.host)
+        t.start(t.players[0].id)
         p = t.player(t.actor)
         t.disconnect(p.id)
         self.assertTrue(p.folded)
@@ -178,7 +178,7 @@ class PokerTests(unittest.TestCase):
 
     def test_nonactor_disconnect_preserves_turn(self):
         t = self.table((100,) * 4)
-        t.start(t.host)
+        t.start(t.players[0].id)
         actor = t.actor
         t.disconnect(t.players[0].id)
         self.assertEqual(t.actor, actor)
@@ -188,7 +188,7 @@ class PokerTests(unittest.TestCase):
 
     def test_disconnected_all_in_stays_eligible(self):
         t = self.table((100, 10, 100))
-        t.start(t.host)
+        t.start(t.players[0].id)
         p = t.players[1]
         t.act(t.actor, "check_call")
         t.act(t.actor, "check_call")
@@ -199,15 +199,15 @@ class PokerTests(unittest.TestCase):
             t.act(t.actor, "check_call")
         self.assertEqual(self.total(t), 210)
 
-    def test_host_stack_and_join_guards(self):
+    def test_any_player_deals_and_stack_and_join_guards(self):
         t = self.table()
         with self.assertRaises(InvalidAction):
-            t.start(t.players[1].id)
-        t.start(t.host)
+            t.start("not-a-player")
+        t.start(t.players[1].id)
         with self.assertRaises(InvalidAction):
-            t.start(t.host)
+            t.start(t.players[0].id)
         with self.assertRaises(InvalidAction):
-            t.set_stack(t.host, 200)
+            t.set_stack(t.players[0].id, 200)
         newcomer = t.join("Player 0")
         self.assertNotEqual(newcomer.name, t.players[0].name)
         self.assertFalse(newcomer.in_hand)
@@ -217,9 +217,9 @@ class PokerTests(unittest.TestCase):
 
     def test_private_cards(self):
         t = self.table()
-        t.start(t.host)
-        state = t.state(t.host)
-        self.assertEqual(state["hand"], t.player(t.host).hand)
+        t.start(t.players[0].id)
+        state = t.state(t.players[0].id)
+        self.assertEqual(state["hand"], t.player(t.players[0].id).hand)
         self.assertTrue(
             all("hand" not in p and "token" not in p for p in state["players"])
         )
@@ -232,7 +232,7 @@ class PokerTests(unittest.TestCase):
             for _ in range(5):
                 if sum(p.stack > 0 for p in t.players) < 2:
                     break
-                t.start(t.host)
+                t.start(t.players[0].id)
                 actions = 0
                 while t.running:
                     actions += 1

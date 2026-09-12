@@ -8,7 +8,7 @@ commands live in the [README](../../README.md).
 
 ## Serving the app
 
-During development, Vite proxies `/ws` and `/health` to the backend on port 8000.
+During development, Vite proxies `/ws`, `/feedback`, and `/health` to the backend on port 8000.
 The frontend normally derives the WebSocket address from the page's host and
 protocol; `VITE_WS_URL` can override it.
 
@@ -18,7 +18,7 @@ explicit port and the backend `.env`; the default `run.py` launcher and Vite
 health proxy still target 8000. Verify poker directly at port 8001. See the
 [README](../../README.md#running-alongside-another-app-on-port-8000) for commands.
 
-For production, serve the Vite build as static files and proxy `/ws` to Uvicorn
+For production, serve the Vite build as static files and proxy `/ws` and `/feedback` to Uvicorn
 with WebSocket upgrade support, or configure an explicit backend URL at build
 time. HTTPS pages use secure WebSockets (`wss://`). The frontend and backend are
 separate serving concerns; FastAPI does not serve the built UI.
@@ -80,6 +80,8 @@ pricing references, and deployment, activation, and verification commands.
 [Engine tests](../../backend/tests/test_game.py) cover the game rules and privacy.
 [API tests](../../backend/tests/test_api.py) exercise the WebSocket contract,
 sessions, invalid messages, and the single shared game using in-process clients.
+[Feedback tests](../../backend/tests/test_feedback.py) cover private persistence, reporter
+attribution, validation, and failures without AWS access.
 [Persistence tests](../../backend/tests/test_storage.py) cover recovery and storage
 failure behavior without AWS access. CloudFormation templates are checked with
 `cfn-lint`; live deployment is verified through stack events and table/budget
@@ -96,6 +98,8 @@ and Uvicorn backend through Playwright/Chrome, backed by a separate Moto DynamoD
 server. Each player has an isolated browser profile. The test runner strips AWS
 settings, supplies fake credentials and a loopback DynamoDB endpoint, and uses
 separate temporary ports, so it does not write to the deployed game or history.
+The `--feedback-only` mode checks desktop/mobile dialogs, focus restoration, draft
+retention, guest/player persistence, Settings access, and private feedback export.
 Backend subprocesses keep their normal production dependencies. Tests cover
 complete hands, nine-player side pots, browser identity, private cards, crash
 recovery, transaction conflicts, mobile interactions, and the private export CLI.

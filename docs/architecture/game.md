@@ -11,14 +11,21 @@ running server. Its implementation is [game.py](../../backend/game.py).
 The table begins in `waiting`, moves through `preflop`, `flop`, `turn`, and `river`,
 and ends in `complete`. A hand can finish early when only one player remains.
 When no further betting is possible, the engine automatically runs out the board.
-The result stays visible until the host deals again.
+The result stays visible until the next manual deal, or for five seconds before
+automatic dealing when enabled and at least two connected players have chips.
 
 ## Rules and shared state
 
 The engine owns blinds, dealer rotation, turn order, minimum raises, all-in
 eligibility, main/side pots, ties, and uncalled-chip returns. Chips are integers;
 players start with 1,000 and blinds are 5/10. Players can set their own stack
-between hands. Chat and game activity share a rolling display log of 100 entries.
+between hands. Any connected player can change the shared lobby settings:
+positive integer-unit blinds (SB ≤ BB ≤ 1,000,000), cents mode, and auto-deal.
+Blinds and cents can change only between hands; auto-deal can change during play.
+Cents mode denominates each integer unit as 0.01 instead of 1 for everyone;
+switching modes preserves underlying chip balances. Defaults are whole chips and
+manual dealing. Settings are checkpointed with backward-compatible defaults and
+emit a `settings_changed` archive event. Chat and game activity share a rolling display log of 100 entries.
 The engine also emits structured, ordered private events for joins, seat removal,
 chip movements, blinds, actions (including forced folds), boards, chat, and results.
 Each event has a schema version, UTC timestamp, sequence, session ID, and hand ID
@@ -53,4 +60,6 @@ Identity lookup records use a SHA-256 digest of the random token.
 
 [Engine tests](../../backend/tests/test_game.py) cover turn order, betting rules,
 payouts, privacy, disconnects, and chip conservation, including randomized legal
-hands. See the [README](../../README.md#checks) for test commands.
+hands. [Settings tests](../../backend/tests/test_settings.py) cover shared-setting
+validation, checkpoint compatibility, delayed deals, cancellation, and disconnects.
+See the [README](../../README.md#checks) for test commands.

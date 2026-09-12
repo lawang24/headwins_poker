@@ -47,6 +47,8 @@ class Table:
         self.min_raise = 10
         self.small_blind = 5
         self.big_blind = 10
+        self.auto_deal = False
+        self.cents = False
         self.pending = set()
         self.result = None
         self.history = []
@@ -119,10 +121,6 @@ class Table:
     @property
     def running(self):
         return self.street in {"preflop", "flop", "turn", "river"}
-
-    @property
-    def host(self):
-        return next((p.id for p in self.players if p.connected), None)
 
     def player(self, player_id):
         return next(p for p in self.players if p.id == player_id)
@@ -199,8 +197,8 @@ class Table:
         self.pot += amount
 
     def start(self, player_id):
-        if player_id != self.host:
-            raise InvalidAction("Only the table host can deal a hand.")
+        if not any(p.id == player_id and p.connected for p in self.players):
+            raise InvalidAction("Join the table before dealing a hand.")
         if self.running:
             raise InvalidAction("Finish the current hand before dealing again.")
         eligible = {p.id for p in self.players if p.connected and p.stack > 0}
@@ -459,6 +457,23 @@ class Table:
         if not any(p.connected for p in self.players):
             self.end_session("table_empty")
 
+    def set_settings(self, player_id, small_blind, big_blind, auto_deal, cents):
+        if not self.player(player_id).connected:
+            raise InvalidAction("Join the table before changing settings.")
+        sb, bb = chips(small_blind), chips(big_blind)
+        if not 0 < sb <= bb:
+            raise InvalidAction("Blinds must be positive, with SB no greater than BB.")
+        if type(cents) is not bool:
+            raise InvalidAction("Cents must be true or false.")
+        if type(auto_deal) is not bool:
+            raise InvalidAction("Auto-deal must be true or false.")
+        if self.running and (sb != self.small_blind or bb != self.big_blind or cents != self.cents):
+            raise InvalidAction("Change blinds and cents between hands.")
+        self.small_blind, self.big_blind, self.auto_deal = sb, bb, auto_deal
+        self.cents = cents
+        self.record("settings_changed", player_id=player_id,
+                    small_blind=sb, big_blind=bb, auto_deal=auto_deal, cents=cents)
+
     def set_stack(self, player_id, amount):
         if self.running:
             raise InvalidAction("Stacks can only be changed between hands.")
@@ -499,7 +514,6 @@ class Table:
                 for q in self.players
             ],
             "you": viewer,
-            "host": self.host,
             "dealer": self.dealer,
             "actor": self.actor,
             "street": self.street,
@@ -510,6 +524,8 @@ class Table:
             "target": self.target,
             "small_blind": self.small_blind,
             "big_blind": self.big_blind,
+            "auto_deal": self.auto_deal,
+            "cents": self.cents,
             "min_raise_to": self.target + self.min_raise,
             "max_raise_to": max_total,
             "can_raise": raise_allowed,

@@ -4,7 +4,7 @@ const assets = import.meta.glob(
     "!./assets/SVG-cards-1.3/*2.svg",
     "!./assets/SVG-cards-1.3/*joker.svg",
   ],
-  { eager: true, query: "?url", import: "default" },
+  { eager: true, query: "?inline", import: "default" },
 ) as Record<string, string>;
 const ranks: Record<string, string> = {
   T: "10",

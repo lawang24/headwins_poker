@@ -1,13 +1,16 @@
 # How Headwins Poker works
 
 Headwins Poker is a browser-based, play-money Texas Hold’em app for two to nine
-players at one shared table. The browser shows the game and sends player actions;
+players at one shared table, with no host or privileged seat. Anyone at the table can configure shared blinds, cents denominations, and automatic
+next-hand dealing from Settings. The browser shows the game and sends player actions;
 the backend owns the rules, chips, and authoritative state.
 
 ## The system at a glance
 
 ```mermaid
 flowchart LR
+    Browser -->|Private feedback| Feedback[Feedback intake]
+    Feedback -->|Report, UTC time, reporter| Store
     Browser[Browser] <-->|Actions and private views| Connections[Connections]
     Connections -->|Validated commands| Game[Game engine]
     Game -->|Player views| Connections
@@ -18,7 +21,9 @@ flowchart LR
 
 One backend process coordinates the live game. DynamoDB is optional: it keeps a
 checkpoint for restart recovery and permanent game history, saved together.
-Without it, the game lives only in memory and history is not retained.
+Without it, the game lives only in memory and history is not retained. Feedback
+uses the private history table independently of game checkpoints; submissions
+require durable storage and are never broadcast to players.
 
 ## Modules
 

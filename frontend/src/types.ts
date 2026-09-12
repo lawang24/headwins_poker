@@ -11,7 +11,6 @@ export type Player = {
 export type State = {
   players: Player[];
   you: string;
-  host: string;
   dealer: string;
   actor: string | null;
   street: string;
@@ -22,6 +21,8 @@ export type State = {
   target: number;
   small_blind: number;
   big_blind: number;
+  auto_deal: boolean;
+  cents: boolean;
   min_raise_to: number;
   max_raise_to: number;
   can_raise: boolean;

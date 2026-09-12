@@ -24,7 +24,7 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open http://127.0.0.1:5173/ in two separate browser profiles (or different browsers) and enter a name in each. Tabs in the same profile reuse one player identity. Everyone connects to the same global game. The first connected player is the host and can deal once two players have chips. The **Invite friends** button copies the app URL.
+Open http://127.0.0.1:5173/ in two separate browser profiles (or different browsers) and enter a name in each. Tabs in the same profile reuse one player identity. Everyone connects to the same global game. Any connected player can deal once two players have chips. The **Invite friends** button copies the app URL.
 
 Vite proxies `/ws` to port 8000. To use another backend address, copy `frontend/.env.example` to `frontend/.env.development.local` and set `VITE_WS_URL` (for example, `ws://127.0.0.1:8001/ws`), then run Uvicorn on that port. A localhost invitation works only on the same machine; remote friends need a reachable hosted address.
 
@@ -49,7 +49,7 @@ at `http://127.0.0.1:8001/health`; Vite's default health proxy still targets 800
 - **Raise to** is the total committed on the current betting street. The server checks turns, minimum raises, available chips, and whether short all-ins reopen betting.
 - All-in players skip further actions. When no further betting is possible, the board runs out automatically. Main/side pots split by eligibility and hand rank; odd chips go clockwise starting left of the dealer. Uncalled excess is returned.
 - A completed hand stays visible for review. The host deals the next hand. There is no mid-hand restart.
-- New arrivals wait for the next hand. Disconnecting folds a player with chips; an all-in player remains eligible. Reload restores the same seat using its saved browser identity, but a hand already folded remains folded. Reconnecting the same token elsewhere replaces the old socket. The host role passes to the first connected seat.
+- New arrivals wait for the next hand. Disconnecting folds a player with chips; an all-in player remains eligible. Reload restores the same seat using its saved browser identity, but a hand already folded remains folded. Reconnecting the same token elsewhere replaces the old socket.
 - Chat and the last 100 activity messages are shared by everyone at the table. Hole cards stay private until a contested showdown.
 
 ## DynamoDB and budget alerts
@@ -132,6 +132,7 @@ the backend, run these commands from `backend` using an authorized AWS profile:
 ./venv/bin/python export_history.py --hand HAND_ID --output /tmp/poker-hand.json
 ./venv/bin/python export_history.py --player PLAYER_ID --output /tmp/poker-player.json
 ./venv/bin/python export_history.py --system --output /tmp/poker-system.json
+./venv/bin/python export_history.py --feedback --output /tmp/poker-feedback.json
 ```
 
 Session events identify players and hands. Player exports include lifetime net
@@ -202,3 +203,17 @@ with mobile viewport simulation, not a physical-phone or real-AWS load test.
 Build the frontend with `npm run build` and serve `frontend/dist`. Proxy `/ws` to Uvicorn with WebSocket upgrade support, or supply an explicit `VITE_WS_URL` at build time. HTTPS pages require `wss://` connections. Run **one backend worker**: live gameplay is not coordinated between processes. `/health` returns `{"status":"ok"}` unless a persistence failure has stopped the game.
 
 This implementation is for casual play-money games. Memory-only mode loses state on restart; DynamoDB mode recovers the saved table. Everyone who opens the app joins the same game; there is no room selection, password, or account system. Account authentication, a history/equity UI, distributed workers, and public-service abuse controls are separate work; no real-money settlement is implemented.
+
+### Feedback
+
+The corner Feedback button is available before joining, at the table, and in
+Settings. Reports are stored privately in `DYNAMODB_HISTORY_TABLE`, with a server
+UTC timestamp, name, and stable player ID for returning players. Guests provide
+a self-reported name. Both DynamoDB settings must be configured; memory-only mode
+returns an error and preserves the draft. Restart the backend after updating code.
+When serving behind a reverse proxy, enable WebSocket upgrades for `/feedback`
+as well as `/ws`. `VITE_WS_URL` should end in `/ws`; feedback uses the same host
+and path prefix with `/feedback`. Use the `--feedback` export above to review reports.
+Run the focused browser check with
+`PYTHONPATH=.artifacts/e2e/deps backend/venv/bin/python backend/e2e/browser_test.py --feedback-only`
+from the repository root after installing the E2E dependencies.
