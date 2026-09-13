@@ -1,9 +1,15 @@
 # Project instructions
 
-## Offer a demo after edits
+## Automatically show frontend changes
 
-- After making any edit in this repository, ask the user whether they want the
-  change demoed.
+- After any frontend change, start or update a running local preview and open
+  the affected screen in a visible browser before finishing. Show the change
+  automatically; do not ask whether the user wants a demo first.
+- Briefly demonstrate the changed behavior, then leave the preview running and
+  the browser tab open for the user to try. Reuse an existing preview when
+  appropriate, and make sure it reflects the latest changes.
+- If a preview cannot run, explain the concrete blocker and what is needed to
+  resolve it. A screenshot or build result alone does not replace the live demo.
 
 ## Verify UI changes in the browser
 

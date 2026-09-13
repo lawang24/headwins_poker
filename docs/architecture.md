@@ -40,6 +40,9 @@ behavior and links to the implementation.
 
 [Operations](architecture/operations.md) covers hosting, infrastructure, cost
 monitoring, and verification. The [README](../README.md) contains setup commands.
+This guide describes responsibilities, data flow, and system constraints. Runtime
+database addresses and deployment-specific resource names belong in environment
+configuration, outside the architecture guide.
 
 ## How a turn reaches everyone
 

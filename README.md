@@ -54,10 +54,10 @@ at `http://127.0.0.1:8001/health`; Vite's default health proxy still targets 800
 
 ## DynamoDB and budget alerts
 
-The local `backend/.env` selects `headwins-poker-data-game` in `us-east-1`
-using AWS profile `lawang`. `python run.py` loads that ignored file. On a fresh
-checkout, copy `backend/.env.example` to `backend/.env` after deploying both tables.
-Existing installations must also add `DYNAMODB_HISTORY_TABLE=headwins-poker-data-history`.
+The local `backend/.env` selects the checkpoint and history tables and the AWS
+region/profile. `python run.py` loads that ignored file. On a fresh checkout,
+copy `backend/.env.example` to `backend/.env` after deploying both tables, then
+set `DYNAMODB_TABLE` and `DYNAMODB_HISTORY_TABLE` from your stack outputs.
 For direct Uvicorn use, add `--env-file .env` from the backend directory.
 Leave `DYNAMODB_TABLE` empty for memory-only development and automated tests.
 Never put AWS credentials into frontend environment files.
@@ -86,7 +86,7 @@ aws cloudformation deploy --profile lawang --region us-east-1 \
   --stack-name headwins-poker-budget --template-file infra/budgets.yaml \
   --parameter-overrides AlertEmail=YOUR_EMAIL
 aws cloudformation deploy --profile lawang --region us-east-1 \
-  --stack-name headwins-poker-data --template-file infra/dynamodb.yaml
+  --stack-name YOUR_DATA_STACK --template-file infra/dynamodb.yaml
 ```
 
 Both tables are tagged `Project=headwins-poker` and use Standard provisioned
@@ -229,10 +229,10 @@ the Render backend at `https://headwins-poker.onrender.com`. Set the frontend's
 Render backend needs these environment settings (its Uvicorn command does not
 load the local `.env`):
 
-| Setting | Production value |
+| Setting | Value |
 | --- | --- |
-| `DYNAMODB_TABLE` | `headwins-poker-data-game` |
-| `DYNAMODB_HISTORY_TABLE` | `headwins-poker-data-history` |
+| `DYNAMODB_TABLE` | Checkpoint table name from your data stack outputs |
+| `DYNAMODB_HISTORY_TABLE` | History table name from your data stack outputs |
 | `AWS_REGION` | `us-east-1` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Dedicated backend credential, stored only in Render |
 
@@ -241,7 +241,8 @@ Provision the backend identity separately from the retained data tables:
 ```sh
 aws cloudformation deploy --profile lawang --region us-east-1 \
   --stack-name headwins-poker-render-access \
-  --template-file infra/render-access.yaml --capabilities CAPABILITY_NAMED_IAM
+  --template-file infra/render-access.yaml --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides DataStackName=YOUR_DATA_STACK
 ```
 
 Create an access key for the resulting backend user and transfer it securely to

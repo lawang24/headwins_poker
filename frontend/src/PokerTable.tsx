@@ -1,6 +1,6 @@
 import { useRef, useState, type CSSProperties } from "react";
 import type { Action } from "./ActionControls";
-import { formatAmount } from "./amounts";
+import { formatAmount, inputAmount, parseAmount } from "./amounts";
 import { Cards } from "./Cards";
 import type { Player, State } from "./types";
 
@@ -50,10 +50,37 @@ function Seat({ player, state, index, count, select }: {
   </article>;
 }
 
+function PlayerStackEditor({ player, state, ready, send, close }: {
+  player: Player; state: State; ready: boolean; send: (action: Action) => void; close: () => void;
+}) {
+  const [stack, setStack] = useState(inputAmount(player.stack, state.cents));
+  const amount = parseAmount(stack, state.cents);
+  const editable = ready && !state.running;
+  const valid = Number.isInteger(amount) && amount >= 0 && amount <= 1_000_000;
+  const unit = state.cents ? 100 : 1;
+  return <form onSubmit={event => {
+    event.preventDefault();
+    if (!editable || !valid) return;
+    send({ type: "set_stack", amount });
+    close();
+  }}>
+    <label>Your stack
+      <input type="number" min="0" max={1_000_000 / unit} step={1 / unit}
+        required value={stack} disabled={!editable}
+        onChange={event => setStack(event.target.value)} aria-describedby="player-stack-help" />
+    </label>
+    <p id="player-stack-help" className="hint">{state.running
+      ? "Finish the current hand before changing your stack."
+      : `Set your total stack from 0 to ${formatAmount(1_000_000, state.cents)} chips.`}</p>
+    <button className="primary" disabled={!editable || !valid}>Set stack</button>
+  </form>;
+}
+
 export function PokerTable({ state, ready, send }: {
   state: State; ready: boolean; send: (action: Action) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [editorVersion, setEditorVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const player = state.players.find(p => p.id === selected);
   const players = state.players;
@@ -76,6 +103,7 @@ export function PokerTable({ state, ready, send }: {
       const angle = index * Math.PI * 2 / 9;
       return occupant ? <Seat key={index} player={occupant} state={state} index={index} count={9} select={() => {
         setSelected(occupant.id);
+        setEditorVersion(version => version + 1);
         dialog.current?.showModal();
       }} /> : <button key={index} className="table-seat empty-seat" type="button"
         style={{ "--seat-x": `${50 - 40 * Math.sin(angle)}%`, "--seat-y": `${50 + 37 * Math.cos(angle)}%`, "--mobile-x": `${mx}%`, "--mobile-y": `${my}%` } as CSSProperties}
@@ -88,7 +116,11 @@ export function PokerTable({ state, ready, send }: {
       <h2 id="player-title">{player?.name || "Player has left"}</h2>
       {player && <p>Seat {player.seat + 1} · {formatAmount(player.stack, state.cents)} chips</p>}
       {player?.id === state.you
-        ? <p>Click an empty seat to move between hands.</p>
+        ? <>
+          <PlayerStackEditor key={`${editorVersion}:${player.stack}:${state.cents}:${state.running}`}
+            player={player} state={state} ready={ready} send={send} close={() => dialog.current?.close()} />
+          <p className="hint">Click an empty seat to move between hands.</p>
+        </>
         : player && <p>Remove this player from the table? Their remaining chips will be cashed out. They can join again manually.</p>}
       {state.running && <p className="hint">Finish the current hand before moving seats or removing players.</p>}
       <div className="feedback-actions">

@@ -11,7 +11,11 @@ It owns form and connection state; it does not decide game outcomes.
 connection recovery. [PokerTable.tsx](../../frontend/src/PokerTable.tsx) renders the
 felt, board, bets, and nine fixed numbered seats in server seat order. Empty seats
 are buttons that move the viewer between hands; occupied nameplates open a native
-modal with player details and a kick confirmation for other players. The modal
+modal with player details and a kick confirmation for other players. Clicking
+your own nameplate opens a stack editor using the existing `set_stack` command.
+It starts with your current balance, supports whole-chip and cents denominations,
+and permits changes only between hands while connected. Reopening the dialog or
+receiving a changed balance, denomination, or hand status resets the draft. The modal
 supports Escape, traps focus, and restores focus when closed. Everyone sees the
 same seat positions, so moving changes both the visible position and dealing order. Desktop seats surround an oval;
 portrait layouts use two side rails with a gap for the board. The game shell in

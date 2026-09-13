@@ -475,10 +475,11 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
   margin: 0 auto;
   container-type: size;
 }
-.app-table .table-seat { width: min(162px, 19cqw); }
-.app-table .seat-cards { width: min(76px, 9cqw); }
-.app-table .seat-cards .card { width: min(43px, 5cqw); height: auto; aspect-ratio: 5 / 7; }
-.app-table .card-backs span { width: min(43px, 5cqw); height: auto; aspect-ratio: 5 / 7; }
+.app-table .table-seat { width: min(190px, 20cqw); }
+.app-table .seat-cards { --hole-card-width: min(54px, 6cqw); width: calc(2 * var(--hole-card-width) - 6px); }
+.app-table .seat-cards .card { width: var(--hole-card-width); height: auto; aspect-ratio: 5 / 7; }
+.app-table .card-backs span { width: var(--hole-card-width); height: auto; aspect-ratio: 5 / 7; }
+.app-table .card-backs { height: auto; }
 .app-table .community-cards { height: auto; }
 .app-table .community-cards .card { width: min(84px, 8cqw, 18cqh); height: auto; aspect-ratio: 5 / 7; }
 .app-table .board-content { top: 50%; transform: translateY(-50%); }
@@ -499,10 +500,10 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
     box-shadow: 0 12px 32px #0008;
   }
   .app-table .table-seat { width: min(112px, 25cqw); }
-  .app-table .seat-cards { width: 56px; height: min(39px, 7cqh); }
-  .app-table .seat-cards .card { width: min(30px, 5cqh); }
-  .app-table .card-backs { height: min(41px, 7cqh); }
-  .app-table .card-backs span { width: min(30px, 5cqh); }
+  .app-table .seat-cards { --hole-card-width: min(40px, 6.5cqh); width: calc(2 * var(--hole-card-width) - 6px); height: calc(var(--hole-card-width) * 1.4); }
+  .app-table .seat-cards .card { width: var(--hole-card-width); }
+  .app-table .card-backs { height: auto; }
+  .app-table .card-backs span { width: var(--hole-card-width); }
   .app-table .seat-body { min-height: 0; }
   .app-table .nameplate { min-height: 36px; padding: 3px 6px; line-height: 1.2; }
   .app-table .nameplate strong { font-size: 11px; }
@@ -546,9 +547,9 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
   .app-table .table-stage .felt { inset: 16% 16%; border-radius: 50%; }
   .app-table .table-seat { left: var(--seat-x); top: var(--seat-y); width: min(125px, 18cqw); }
   .app-table .seat-body { flex-direction: row; align-items: center; }
-  .app-table .seat-cards { width: 48px; height: 40px; }
-  .app-table .seat-cards .card, .app-table .card-backs span { width: 27px; }
-  .app-table .card-backs { height: 39px; }
+  .app-table .seat-cards { --hole-card-width: 34px; width: 62px; height: 48px; }
+  .app-table .seat-cards .card, .app-table .card-backs span { width: var(--hole-card-width); }
+  .app-table .card-backs { height: 48px; }
   .app-table .dealer-marker { top: -8px; }
   .app-table .table-bet { left: var(--desktop-bet-x) !important; top: var(--desktop-bet-y) !important; min-height: 18px; padding: 1px 5px; font-size: 9px; }
   .app-table .board-content { left: 8%; right: 8%; }
@@ -563,9 +564,9 @@ header .eyebrow { font-size: 9px; margin-bottom: 2px; color: #a8a8a8; }
 @media (max-width: 600px) {
   @container (max-height: 340px) {
     .app-table .seat-body { flex-direction: row; align-items: center; }
-    .app-table .seat-cards { width: 30px; height: 30px; }
-    .app-table .seat-cards .card, .app-table .card-backs span { width: 20px; }
-    .app-table .card-backs { height: 29px; }
+    .app-table .seat-cards { --hole-card-width: 26px; width: 46px; height: 37px; }
+    .app-table .seat-cards .card, .app-table .card-backs span { width: var(--hole-card-width); }
+    .app-table .card-backs { height: 37px; }
     .app-table .nameplate { padding: 3px; }
     .app-table .dealer-marker { top: -8px; }
   }
