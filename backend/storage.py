@@ -64,7 +64,7 @@ def restore(payload):
         "big_blind",
     ):
         setattr(table, key, data[key])
-    table.auto_deal = data.get("auto_deal", False)
+    table.auto_deal = True  # Automatic dealing also applies to older checkpoints.
     table.cents = data.get("cents", False)
     table.session_id = data.get("session_id")
     table.hand_id = data.get("hand_id")

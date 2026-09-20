@@ -1,14 +1,17 @@
-# Clean card faces
+# Card faces
 
-The approved minimal deck: 52 white, rounded 5:7 cards, each with one large serif
-rank above one offset suit. Hearts and diamonds are red; clubs and spades are
-charcoal. There are no mirrored indices, pip arrays, or court illustrations.
+The deck contains 52 desktop faces and 52 portrait hole-card variants, drawn at a
+native 61:74 aspect ratio. White rounded cards use Abril Fatface rank outlines and
+shared vector suit silhouettes. Portrait variants put a smaller rank and suit
+in the exposed corner above the nameplate. Board cards use the desktop artwork.
 
-Each SVG is self-contained. Lettering is outlined, so rendering requires no font
-installation or network request. The rank artwork was prepared from Bodoni 72
-Bold outlines; no font software is included. Suit silhouettes are project paths.
-The shared geometry is in `frontend/scripts/card-ranks.json` and
-`frontend/scripts/generate-cards.mjs`.
+Abril Fatface is by TypeTogether, distributed under the SIL Open Font License.
+The outlines come from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/abrilfatface).
+The license is retained in `frontend/scripts/AbrilFatface-OFL.txt`. SVGs contain
+outlines, so rendering requires no installed font or external network request.
+Suit silhouettes are project paths.
 
-From `frontend`, regenerate with `node scripts/generate-cards.mjs`. The app imports
-the generated SVGs inline. Card shadows, sizing, and hand overlap remain in CSS.
+From `frontend`, regenerate with `node scripts/generate-cards.mjs`. Rank outlines
+live in `scripts/card-ranks.json`; all face geometry is in the generator. The app
+bundles the SVGs and selects portrait hole-card faces with a picture source.
+Sizing, shadows, and hand overlap remain in CSS.

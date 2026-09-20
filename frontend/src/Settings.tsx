@@ -9,10 +9,9 @@ export function Settings({ state, ready, send, back }: {
   const [cents, setCents] = useState(state.cents);
   const [sb, setSb] = useState(inputAmount(state.small_blind, state.cents));
   const [bb, setBb] = useState(inputAmount(state.big_blind, state.cents));
-  const [autoDeal, setAutoDeal] = useState(state.auto_deal);
   const small = parseAmount(sb, cents), big = parseAmount(bb, cents);
   const valid = small > 0 && big >= small && big <= 1_000_000;
-  const changed = small !== state.small_blind || big !== state.big_blind || cents !== state.cents || autoDeal !== state.auto_deal;
+  const changed = small !== state.small_blind || big !== state.big_blind || cents !== state.cents;
   return <section className="settings-page panel" aria-labelledby="settings-title">
     <button type="button" onClick={back}>← Back to table</button>
     <p className="eyebrow">SHARED LOBBY</p>
@@ -20,7 +19,7 @@ export function Settings({ state, ready, send, back }: {
     <p className="hint">Anyone at the table can change these settings. Changes apply to every player.</p>
     <form onSubmit={e => {
       e.preventDefault();
-      if (ready && valid && changed) send({ type: "settings", small_blind: small, big_blind: big, auto_deal: autoDeal, cents });
+      if (ready && valid && changed) send({ type: "settings", small_blind: small, big_blind: big, cents });
     }}>
       <fieldset disabled={!ready || state.running}>
         <legend>Denominations</legend>
@@ -39,10 +38,6 @@ export function Settings({ state, ready, send, back }: {
         </div>
         <p className="hint">{state.running ? "Finish the current hand to change denominations." : "Blinds must be positive, with the big blind at least as large as the small blind."}</p>
       </fieldset>
-      <label className="setting-toggle">
-        <span>Auto-deal next hand<small>Deal automatically five seconds after a hand ends, when at least two players have chips. Deal the first hand manually.</small></span>
-        <input type="checkbox" role="switch" checked={autoDeal} disabled={!ready} onChange={e => setAutoDeal(e.target.checked)} />
-      </label>
       <div className="settings-save">
         <button className="primary" disabled={!ready || !valid || !changed}>Save settings</button>
         <span role="status">{!ready ? "Waiting for connection or update…" : changed ? "Unsaved changes" : "Lobby settings are up to date"}</span>

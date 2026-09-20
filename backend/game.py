@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, asdict
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from hashlib import sha256
 from uuid import uuid4
 from deck_of_cards import DeckOfCards
@@ -48,10 +48,11 @@ class Table:
         self.min_raise = 10
         self.small_blind = 5
         self.big_blind = 10
-        self.auto_deal = False
+        self.auto_deal = True
         self.cents = False
         self.pending = set()
         self.result = None
+        self.runout_vote = None
         self.history = []
         self.hand_number = 0
         self.deck = DeckOfCards()
@@ -249,6 +250,7 @@ class Table:
         self.deck = DeckOfCards()
         self.deck.shuffle()
         self.board, self.pot, self.result = [], 0, None
+        self.runout_vote = None
         self.target, self.min_raise = self.big_blind, self.big_blind
         self.hand_number += 1
         self.street = "preflop"
@@ -363,6 +365,8 @@ class Table:
         self.advance(p.id)
 
     def advance(self, after):
+        if self.runout_vote:
+            return
         while self.running:
             live = self.live()
             if len(live) <= 1:
@@ -383,6 +387,9 @@ class Table:
             if self.street == "river":
                 self.finish()
                 return
+            if len(able) <= 1:
+                self.offer_runouts()
+                return
             self.street = {"preflop": "flop", "flop": "turn", "turn": "river"}[
                 self.street
             ]
@@ -400,16 +407,107 @@ class Table:
             self.pending = {p.id for p in able} if len(able) >= 2 else set()
             after = self.dealer
 
-    def finish(self):
+    def offer_runouts(self):
+        """Betting is closed; every remaining contender must agree to two runs."""
+        self.actor = None
+        self.pending.clear()
+        self.runout_vote = {
+            "hand_id": self.hand_id,
+            "eligible": [p.id for p in self.live()],
+            "votes": {},
+            "deadline": (datetime.now(timezone.utc) + timedelta(seconds=20)).isoformat(),
+        }
+        self.record("runout_offered", **self.runout_vote)
+        if any(not p.connected for p in self.live()):
+            self.resolve_runouts(1, "disconnect")
+
+    def choose_runouts(self, player_id, count, hand_id):
+        vote = self.runout_vote
+        if not vote or hand_id != self.hand_id:
+            raise InvalidAction("That runout choice has expired.")
+        if player_id not in vote["eligible"] or not self.player(player_id).connected:
+            raise InvalidAction("Only players still in this hand can choose runouts.")
+        if type(count) is not int or count not in (1, 2):
+            raise InvalidAction("Choose one or two runouts.")
+        if datetime.now(timezone.utc) >= datetime.fromisoformat(vote["deadline"]):
+            self.resolve_runouts(1, "timeout")
+            return
+        if player_id in vote["votes"]:
+            raise InvalidAction("You have already chosen for this hand.")
+        vote["votes"][player_id] = count
+        self.record("runout_chosen", player_id=player_id, count=count)
+        if count == 1:
+            self.resolve_runouts(1, "player_choice")
+        elif len(vote["votes"]) == len(vote["eligible"]):
+            self.resolve_runouts(2, "unanimous")
+
+    def resolve_runouts(self, count=1, reason="timeout"):
+        if not self.runout_vote:
+            return
+        prefix = list(self.board)
+        # Each run burns before its remaining flop/turn/river from one shared deck.
+        streets = [("flop", 3), ("turn", 4), ("river", 5)]
+        needed = {0: 8, 3: 4, 4: 2}[len(prefix)]
+        if len(self.deck.cards) < count * needed:
+            count, reason = 1, "insufficient_cards"
+        votes = dict(self.runout_vote["votes"])
+        self.runout_vote = None
+        self.record("runout_resolved", count=count, reason=reason, votes=votes)
+        self.log("Running it twice." if count == 2 else "Running it once.")
+        boards = []
+        for index in range(count):
+            board = list(prefix)
+            for street, end in streets:
+                if len(board) >= end:
+                    continue
+                burned = self.deck.draw()
+                board.extend(self.deck.draw() for _ in range(end - len(board)))
+                self.record("board_dealt", street=street, board=board,
+                            burned=burned, runout=index + 1)
+            boards.append(board)
+        self.board = boards[0]
+        self.street = "river"
+        for p in self.players:
+            p.committed = 0
+            p.acted_at = None
+        self.target, self.min_raise = 0, self.big_blind
+        self.finish(boards)
+
+    def finish(self, boards=None):
         live = self.live()
+        boards = boards or [list(self.board)]
         payouts = {p.id: 0 for p in self.players}
         pots = []
+        runouts = [{"board": board, "payouts": {}, "pots": []} for board in boards]
+
+        def award(amount, winners, runout=None):
+            ordered = []
+            after = self.dealer
+            remaining = set(winners)
+            while remaining:
+                after = self.clockwise(after, remaining)
+                ordered.append(after)
+                remaining.remove(after)
+            share, odd = divmod(amount, len(ordered))
+            pot = {"amount": amount, "winners": ordered}
+            if runout is not None:
+                pot["runout"] = runout + 1
+                runouts[runout]["pots"].append(pot)
+            for i, pid in enumerate(ordered):
+                paid = share + (i < odd)
+                payouts[pid] += paid
+                if runout is not None:
+                    result = runouts[runout]["payouts"]
+                    result[pid] = result.get(pid, 0) + paid
+            pots.append(pot)
+
         if len(live) == 1:
             payouts[live[0].id] = self.pot
             pots.append({"amount": self.pot, "winners": [live[0].id]})
         elif live:
             previous = 0
-            ranks = {p.id: evaluate_cards(*(self.board + p.hand)) for p in live}
+            ranks = [{p.id: evaluate_cards(*(board + p.hand)) for p in live}
+                     for board in boards]
             for level in sorted(
                 {p.contribution for p in self.players if p.contribution > 0}
             ):
@@ -419,26 +517,19 @@ class Table:
                 eligible = [p for p in live if p.contribution >= level]
                 # Uncalled chips are returned, even if their owner disconnected.
                 if len(contributors) == 1:
-                    winners = [contributors[0].id]
+                    award(amount, [contributors[0].id])
                 elif not eligible:
                     # No live contender for this layer: return each excess contribution.
                     for p in contributors:
                         payouts[p.id] += amount // len(contributors)
                     continue
                 else:
-                    best = min(ranks[p.id] for p in eligible)
-                    winners = [p.id for p in eligible if ranks[p.id] == best]
-                ordered = []
-                after = self.dealer
-                remaining = set(winners)
-                while remaining:
-                    after = self.clockwise(after, remaining)
-                    ordered.append(after)
-                    remaining.remove(after)
-                share, odd = divmod(amount, len(ordered))
-                for i, pid in enumerate(ordered):
-                    payouts[pid] += share + (i < odd)
-                pots.append({"amount": amount, "winners": ordered})
+                    share, odd = divmod(amount, len(boards))
+                    for index, rank in enumerate(ranks):
+                        best = min(rank[p.id] for p in eligible)
+                        winners = [p.id for p in eligible if rank[p.id] == best]
+                        # First run receives an odd chip; ties follow seat order.
+                        award(share + (index < odd), winners, index)
         else:
             payouts = {p.id: p.contribution for p in self.players}
         for p in self.players:
@@ -447,6 +538,7 @@ class Table:
             "payouts": payouts,
             "pots": pots,
             "hands": {p.id: p.hand for p in live} if len(live) > 1 else {},
+            "runouts": runouts if len(live) > 1 else [],
         }
         self.log(
             "Hand complete. "
@@ -470,12 +562,17 @@ class Table:
         self.actor = None
         self.pending = set()
         self.street = "complete"
+        self.runout_vote = None
 
     def disconnect(self, player_id):
         p = self.player(player_id)
         p.connected = False
         self.record("player_disconnected", player_id=p.id)
-        if self.running and p.in_hand and not p.folded and p.stack > 0:
+        if self.runout_vote and player_id in self.runout_vote["eligible"]:
+            # Betting is closed, including for a covering player with chips left.
+            # Keep their pot eligibility and resolve the choice conservatively.
+            self.resolve_runouts(1, "disconnect")
+        elif self.running and p.in_hand and not p.folded and p.stack > 0:
             p.folded = True
             self.record(
                 "action",
@@ -505,14 +602,15 @@ class Table:
             raise InvalidAction("Blinds must be positive, with SB no greater than BB.")
         if type(cents) is not bool:
             raise InvalidAction("Cents must be true or false.")
-        if type(auto_deal) is not bool:
+        # Accept the optional legacy field, but it no longer controls dealing.
+        if auto_deal is not None and type(auto_deal) is not bool:
             raise InvalidAction("Auto-deal must be true or false.")
         if self.running and (sb != self.small_blind or bb != self.big_blind or cents != self.cents):
             raise InvalidAction("Change blinds and cents between hands.")
-        self.small_blind, self.big_blind, self.auto_deal = sb, bb, auto_deal
+        self.small_blind, self.big_blind = sb, bb
         self.cents = cents
         self.record("settings_changed", player_id=player_id,
-                    small_blind=sb, big_blind=bb, auto_deal=auto_deal, cents=cents)
+                    small_blind=sb, big_blind=bb, auto_deal=True, cents=cents)
 
     def set_stack(self, player_id, amount):
         if self.running:
@@ -572,6 +670,7 @@ class Table:
             "can_raise": raise_allowed,
             "call_amount": min(p.stack, max(0, self.target - p.committed)),
             "result": self.result,
+            "runout_vote": deepcopy(self.runout_vote),
             "history": self.history,
             "hand_number": self.hand_number,
         }

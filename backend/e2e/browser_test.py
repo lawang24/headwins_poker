@@ -118,6 +118,9 @@ def join(context, name, url):
 
 
 def set_stack(page, amount):
+    current = state(page)
+    name = next(p["name"] for p in current["players"] if p["id"] == current["you"])
+    page.get_by_role("button", name=f"Player options for {name}", exact=True).click()
     page.get_by_label("Your stack", exact=True).fill(str(amount))
     page.get_by_role("button", name="Set stack", exact=True).click()
     wait(
@@ -175,15 +178,12 @@ def run(feedback_only=False):
         )
     history = resource.Table("e2e-history")
     checkpoint = resource.Table("e2e-game")
+    # These long scenarios control hand boundaries through the legacy command.
+    # Automatic timing itself is covered by AutoDealTests and live UI checks.
     backend_cmd = [
-        str(APP_PYTHON),
-        "-m",
-        "uvicorn",
-        "main:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        str(api_port),
+        str(APP_PYTHON), "-c",
+        "import main, uvicorn; main.server.auto_deal_delay = 3600; "
+        f"uvicorn.run(main.app, host='127.0.0.1', port={api_port})",
     ]
     backend = start(backend_cmd, ROOT / "backend", env, "backend")
     frontend = start(
@@ -246,6 +246,7 @@ def run(feedback_only=False):
                 expect(guest.get_by_text("Thanks! Your feedback has been saved.")).to_be_visible()
                 guest.get_by_role("button", name="Done", exact=True).click()
                 player = join(context(), "Feedback player", url)
+                player.get_by_role("button", name="Options", exact=True).click()
                 player.get_by_role("button", name="Settings", exact=True).click()
                 player.get_by_role("button", name="Feedback", exact=True).click()
                 player.get_by_label("Reporter name").fill("Spoofed name")
@@ -270,17 +271,17 @@ def run(feedback_only=False):
             ca, cb = context(), context()
             a = join(ca, "E2E Alice", url)
             aid = state(a)["you"]
-            expect(a.get_by_role("button", name="Deal first hand")).to_be_disabled()
+            expect(a.get_by_role("button", name="Deal first hand")).to_have_count(0)
             b = join(cb, "E2E Bob", url)
             bid = state(b)["you"]
             wait(a, "window.__e2e.state.players.length === 2")
-            expect(b.get_by_role("button", name="Deal first hand")).to_be_enabled()
-            check("Separate browser identities, shared table, and dealing from either seat")
+            expect(b.get_by_role("button", name="Deal first hand")).to_have_count(0)
+            check("Separate browser identities, shared table, and no manual-deal UI")
             a.get_by_label("Chat message").fill("E2E persistent chat")
             a.get_by_role("button", name="Send", exact=True).click()
             expect(b.get_by_role("log")).to_contain_text("E2E persistent chat")
             check("Chat reaches another player")
-            a.get_by_role("button", name="Deal first hand").click()
+            raw(a, {"type": "start"})
             wait(a, "window.__e2e.state.running")
             wait(b, "window.__e2e.state.running")
             expect(a.get_by_label("Two hidden cards")).to_have_count(1)
@@ -359,7 +360,7 @@ def run(feedback_only=False):
             )
             # Force an actual backend crash while a hand is unfinished.
             stacks = {p["id"]: p["stack"] for p in state(a)["players"]}
-            a.get_by_role("button", name="Deal next hand").click()
+            raw(a, {"type": "start"})
             wait(a, "window.__e2e.state.running")
             backend.kill()
             backend.wait(timeout=10)
@@ -388,6 +389,7 @@ def run(feedback_only=False):
                 "New tab after seat pruning recovers permanent identity",
                 state(b)["you"] == bid,
             )
+            a.get_by_role("button", name="Options", exact=True).click()
             a.get_by_role("button", name="Leave table", exact=True).click()
             expect(
                 a.get_by_role("button", name="Join table", exact=True)
@@ -409,7 +411,7 @@ def run(feedback_only=False):
             for i, p in enumerate(pages):
                 set_stack(p, (i + 1) * 50)
             initial_total = sum(p["stack"] for p in state(a)["players"])
-            a.get_by_role("button", name="Deal next hand").click()
+            raw(a, {"type": "start"})
             wait(a, "window.__e2e.state.running")
             a.set_viewport_size({"width": 390, "height": 844})
             a.screenshot(path=str(OUT / "mobile-nine-players.png"), full_page=True)
@@ -422,6 +424,11 @@ def run(feedback_only=False):
             for _ in range(30):
                 s = state(a)
                 if not s["running"]:
+                    break
+                if s.get("runout_vote"):
+                    for pid in s["runout_vote"]["eligible"]:
+                        by_id[pid].get_by_role("button", name="Run twice", exact=True).click()
+                    wait(a, "window.__e2e.state.street === 'complete'")
                     break
                 p = by_id[s["actor"]]
                 wait(p, "window.__e2e.state.actor === window.__e2e.state.you")

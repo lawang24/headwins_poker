@@ -6,13 +6,14 @@ import type { Player, State } from "./types";
 
 // Portrait seats use two side rails, with seat 1 below the board.
 function portraitPosition(index: number, count: number): [number, number] {
-  if (index === 0) return [50, 91];
+  if (index === 0) return [50, 86];
   if (count === 2) return [50, 10];
   const leftCount = Math.floor((count - 1) / 2);
   const rightCount = count - 1 - leftCount;
-  const rails: Record<number, number[]> = { 1: [24], 2: [18, 76], 3: [14, 32, 78], 4: [14, 32, 66, 84] };
-  if (index <= leftCount) return [20, [...rails[leftCount]].reverse()[index - 1]];
-  return [80, rails[rightCount][index - leftCount - 1]];
+  // Leave room for stacked cards and nameplates on short portrait tables.
+  const rails: Record<number, number[]> = { 1: [24], 2: [18, 76], 3: [14, 32, 78], 4: [17, 33, 58, 74] };
+  if (index <= leftCount) return [14, [...rails[leftCount]].reverse()[index - 1]];
+  return [86, rails[rightCount][index - leftCount - 1]];
 }
 
 function Seat({ player, state, index, count, select }: {
@@ -29,23 +30,24 @@ function Seat({ player, state, index, count, select }: {
   const payout = state.result?.payouts[player.id] || 0;
   const label = !player.connected ? "Disconnected" : player.folded ? "Folded"
     : player.all_in && state.running ? "All-in" : acting ? "To act"
-    : !player.in_hand && state.running ? "Next hand" : mine ? "You" : "";
+    : !player.in_hand && state.running ? "Next hand" : "";
   return <article
     className={`table-seat ${mine ? "is-you" : ""} ${acting ? "is-acting" : ""} ${player.folded ? "is-folded" : ""} ${!player.connected ? "is-disconnected" : ""} ${payout ? "is-winner" : ""}`}
     style={{ "--seat-x": `${x}%`, "--seat-y": `${y}%`, "--mobile-x": `${mx}%`, "--mobile-y": `${my}%` } as CSSProperties}
+    data-seat={index + 1}
     aria-label={`${player.name}${mine ? ", you" : ""}, ${formatAmount(player.stack, state.cents)} chips${label ? `, ${label}` : ""}`}
   >
     <div className="seat-body">
       <div className="seat-cards">
-        {cards.length ? <Cards cards={cards} /> : covered ? <div className="card-backs" aria-label="Two hidden cards"><span /><span /></div> : <div className="empty-cards" aria-hidden="true">{player.folded ? "×" : ""}</div>}
+        {cards.length ? <Cards cards={cards} hole /> : covered ? <div className="card-backs" aria-label="Two hidden cards"><span /><span /></div> : <div className="empty-cards" aria-hidden="true">{player.folded ? "×" : ""}</div>}
       </div>
       <button type="button" className="nameplate" onClick={select} aria-label={`Player options for ${player.name}`}>
         <strong title={player.name}>{player.name}</strong>
         <span className="seat-balance">{formatAmount(player.stack, state.cents)}</span>
-        <span className="player-status">{label || `Seat ${player.seat + 1}`}</span>
+        {payout > 0 && <span className="seat-payout">+{formatAmount(payout, state.cents)}</span>}
+        {label && !payout && <span className="player-status">{label}</span>}
       </button>
       {player.id === state.dealer && <span className="dealer-marker" title="Dealer" aria-label="Dealer">D</span>}
-      {payout > 0 && <span className="seat-payout">+{formatAmount(payout, state.cents)}</span>}
     </div>
   </article>;
 }
@@ -86,14 +88,23 @@ export function PokerTable({ state, ready, send }: {
   const players = state.players;
 
   const eligible = players.filter(p => p.connected && p.stack > 0).length;
-  return <div className="table-stage" data-player-count={9}>
+  const runouts = state.result?.runouts;
+  const twice = runouts && runouts.length > 1;
+  return <div className={`table-stage ${twice ? "has-two-runouts" : ""}`} data-player-count={9}>
     <div className="felt">
       <div className="board-content">
         <div className="pot" aria-label={`Pot ${formatAmount(state.pot, state.cents)} chips`}><span>Pot</span> {formatAmount(state.pot, state.cents)}</div>
-        <div className="community-cards">
+        {twice ? <div className="runout-boards" aria-label="Two runout results">
+          {runouts.map((runout, index) => <section key={index} aria-label={`Run ${index + 1}`}>
+            <h3>Run {index + 1}</h3>
+            <div className="community-cards"><Cards cards={runout.board} /></div>
+            <p className="runout-winners">{Object.entries(runout.payouts).filter(([, amount]) => amount > 0).map(([id, amount]) => `${players.find(p => p.id === id)?.name || "Player"}: +${formatAmount(amount, state.cents)}`).join(" · ")}</p>
+          </section>)}
+        </div> : <div className="community-cards">
           <Cards cards={state.board} />
-        </div>
-        <p className="table-caption">{state.running ? `${players.find(p => p.id === state.actor)?.name || "Table"} to act` : state.street === "complete" ? "Hand complete" : eligible < 2 ? "Waiting for players" : "Ready for the next hand"}</p>
+        </div>}
+        <p className="table-caption">{state.runout_vote ? "Choosing runouts" : state.running ? `${players.find(p => p.id === state.actor)?.name || "Table"} to act` : eligible < 2 ? "Waiting for players with chips" : state.street === "complete" ? "Next hand starting soon" : "First hand starting soon"}</p>
+        <p className="board-meta">Hand #{state.hand_number} · {state.street} · {formatAmount(state.small_blind, state.cents)} / {formatAmount(state.big_blind, state.cents)}</p>
       </div>
       <span className="felt-brand" aria-hidden="true">HEADWINS <b>POKER</b></span>
     </div>
@@ -105,11 +116,11 @@ export function PokerTable({ state, ready, send }: {
         setSelected(occupant.id);
         setEditorVersion(version => version + 1);
         dialog.current?.showModal();
-      }} /> : <button key={index} className="table-seat empty-seat" type="button"
+      }} /> : <button key={index} className="table-seat empty-seat" data-seat={index + 1} aria-label={`Seat ${index + 1}`} type="button"
         style={{ "--seat-x": `${50 - 40 * Math.sin(angle)}%`, "--seat-y": `${50 + 37 * Math.cos(angle)}%`, "--mobile-x": `${mx}%`, "--mobile-y": `${my}%` } as CSSProperties}
         disabled={!ready || state.running} title={state.running ? "Change seats between hands" : `Move to seat ${index + 1}`}
         onClick={() => send({ type: "move_seat", seat: index })}>
-        <span aria-hidden="true">+</span> Seat {index + 1}
+        <span className="empty-seat-number" aria-hidden="true">{index + 1}</span><span aria-hidden="true">Sit</span><span className="sr-only">Seat {index + 1}</span>
       </button>;
     })}
     <dialog ref={dialog} className="feedback-modal player-modal" aria-labelledby="player-title">
@@ -135,7 +146,7 @@ export function PokerTable({ state, ready, send }: {
       const index = player.seat;
       const angle = index * Math.PI * 2 / 9;
       const [mx, my] = portraitPosition(index, 9);
-      return state.running && player.committed > 0 ? <div key={player.id} className="table-bet" style={{left: `${50 - 28 * Math.sin(angle)}%`, top: `${50 + 24 * Math.cos(angle)}%`, "--desktop-bet-x": `${50 - 28 * Math.sin(angle)}%`, "--desktop-bet-y": `${50 + 24 * Math.cos(angle)}%`, "--mobile-bet-x": `${50 + (mx - 50) * .58}%`, "--mobile-bet-y": `${my + (my < 50 ? 8 : -3)}%`} as CSSProperties} aria-label={`${player.name} bet ${formatAmount(player.committed, state.cents)}`}><i aria-hidden="true" />{formatAmount(player.committed, state.cents)}</div> : null;
+      return state.running && player.committed > 0 ? <div key={player.id} className="table-bet" style={{left: `${50 - 22 * Math.sin(angle)}%`, top: `${50 + 22 * Math.cos(angle)}%`, "--desktop-bet-x": `${50 - 22 * Math.sin(angle)}%`, "--desktop-bet-y": `${50 + 22 * Math.cos(angle)}%`, "--mobile-bet-x": `${50 + (mx - 50) * .58}%`, "--mobile-bet-y": `${my + (my < 50 ? 8 : -3)}%`} as CSSProperties} aria-label={`${player.name} bet ${formatAmount(player.committed, state.cents)}`}><i aria-hidden="true" />{formatAmount(player.committed, state.cents)}</div> : null;
     })}
   </div>;
 }

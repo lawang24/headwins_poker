@@ -46,6 +46,7 @@ class HistoryTests(unittest.TestCase):
         start = deepcopy(table.hand_start)
         table.act(table.actor, "raise", 200)
         table.act(table.actor, "check_call")
+        table.choose_runouts(a.id, 1, table.hand_id)
         completed = next(e for e in table.events if e["type"] == "hand_completed")
         deck = start["deck_order"]
         self.assertEqual(start["players"][0]["hand"], deck[:2])

@@ -15,21 +15,28 @@ const suits: Record<string, string> = {
   c: "clubs",
   s: "spades",
 };
-function Card({ code }: { code: string }) {
+function Card({ code, hole }: { code: string; hole: boolean }) {
   const name = `${ranks[code[0]] || code[0]}_of_${suits[code[1]]}`;
-  return (
+  const face = (
     <img
-      className="card"
+      className={hole ? "card-face" : "card"}
       src={assets[`./assets/clean-cards/${name}.svg`]}
       alt={name.replaceAll("_", " ")}
     />
   );
+  return hole ? <picture className="card hole-card">
+    <source
+      media="(max-width: 1023px) and (min-height: 501px), (max-width: 600px)"
+      srcSet={assets[`./assets/clean-cards/${name}-mobile.svg`]}
+    />
+    {face}
+  </picture> : face;
 }
-export function Cards({ cards }: { cards: string[] }) {
+export function Cards({ cards, hole = false }: { cards: string[]; hole?: boolean }) {
   return (
     <div className="cards">
       {cards.map((c) => (
-        <Card key={c} code={c} />
+        <Card key={c} code={c} hole={hole} />
       ))}
     </div>
   );

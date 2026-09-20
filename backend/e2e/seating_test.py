@@ -6,6 +6,7 @@ import time
 import urllib.request
 
 from playwright.sync_api import sync_playwright, expect
+from browser_test import INIT, raw
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / ".artifacts" / "seating"
@@ -13,6 +14,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 
 def run():
+    # Freeze hand boundaries for seating checks; timer behavior has separate tests.
     env = {**os.environ, "DYNAMODB_TABLE": "", "DYNAMODB_HISTORY_TABLE": "",
            "VITE_WS_URL": "ws://127.0.0.1:18800/ws"}
     processes = []
@@ -20,7 +22,7 @@ def run():
     contexts = []
     try:
         for name, command, cwd in [
-            ("backend", [str(ROOT / "backend/venv/bin/python"), "-m", "uvicorn", "main:app", "--port", "18800"], ROOT / "backend"),
+            ("backend", [str(ROOT / "backend/venv/bin/python"), "-c", "import main, uvicorn; main.server.auto_deal_delay = 3600; uvicorn.run(main.app, host='127.0.0.1', port=18800)"], ROOT / "backend"),
             ("frontend", ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "15173", "--strictPort"], ROOT / "frontend"),
         ]:
             log = (OUT / (name + ".log")).open("w")
@@ -42,6 +44,7 @@ def run():
             for name in ["Alice", "Bob", "Charlie", "Dana", "Eli", "Fran", "Grace", "Henry"]:
                 context = browser.new_context(viewport={"width": 1440, "height": 900})
                 contexts.append(context)
+                context.add_init_script(INIT)
                 page = context.new_page()
                 page.goto("http://127.0.0.1:15173")
                 page.get_by_label("Your name", exact=True).fill(name)
@@ -98,7 +101,7 @@ def run():
             b.get_by_role("button", name="Join table", exact=True).click()
             expect(b.get_by_role("button", name="Player options for Bob", exact=True)).to_be_visible()
             print("PASS: kick closes peer, frees seat, stops reconnect, permits manual rejoin", flush=True)
-            a.get_by_role("button", name="Deal first hand", exact=True).click()
+            raw(a, {"type": "start"})
             expect(a.get_by_role("button", name="Seat 9", exact=True)).to_be_disabled()
             a.get_by_role("button", name="Player options for Bob", exact=True).click()
             expect(a.get_by_role("button", name="Kick player", exact=True)).to_be_disabled()

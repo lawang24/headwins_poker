@@ -18,33 +18,46 @@ and permits changes only between hands while connected. Reopening the dialog or
 receiving a changed balance, denomination, or hand status resets the draft. The modal
 supports Escape, traps focus, and restores focus when closed. Everyone sees the
 same seat positions, so moving changes both the visible position and dealing order. Desktop seats surround an oval;
-portrait layouts use two side rails with a gap for the board. The game shell in
-[App.css](../../frontend/src/App.css) fits the dynamic viewport: header, actions,
-and footer reserve their space while the table fills the remaining height. Seats
-and cards adapt to the table dimensions; short landscape screens use oval seating.
+portrait layouts use two side rails close to the screen edges, with a gap for the board.
+The game shell in [App.css](../../frontend/src/App.css) fits the dynamic viewport.
+On portrait screens, the table fills the viewport and the toolbar, chat toggle, and
+betting controls overlay reserved corner/bottom areas. Table geometry stays constant
+between hands and turns. Desktop keeps an oval and a separate chat column; short
+landscape screens also use oval seating with a fixed bottom control lane. Nameplates have two fixed lines for name
+and balance, with transient status or payout alongside the balance. Dealer markers
+stay within the screen. Empty seats use numbered outlined slots.
 The activity log scrolls inside its bounded panel rather than expanding the page.
-Feedback occupies a reserved top-right header corner and cannot overlay betting controls.
+[TableToolbar.tsx](../../frontend/src/TableToolbar.tsx) owns a compact Options button,
+connection indicator, and Feedback in the top-right corner. Options opens a native
+modal containing Settings, Invite, Leave, and expandable table instructions. The
+modal supports Escape and native focus management. Branding and instructional footer
+text are omitted from the playing surface; hand/street/blind metadata sits on the felt.
 [Cards.tsx](../../frontend/src/Cards.tsx) embeds the 52 [clean card faces](../../frontend/src/assets/clean-cards/)
 as data URLs in the JavaScript bundle, so dealing does not fetch separate card files.
-Each face has one oversized outlined serif rank and one offset suit on white;
+Each face uses Abril Fatface rank outlines and one offset vector suit on white;
 all ranks, including face cards, use the same layout. Vector outlines keep the
 lettering consistent without browser font dependencies. The [asset generator](../../frontend/scripts/generate-cards.mjs)
-uses shared rank outlines and suit paths to rebuild the deck. Opponents
+uses shared rank outlines and suit paths to rebuild the deck. Hole cards share the same size and seven-degree fan as their backs. Portrait seats
+tuck the cards behind the nameplate. A responsive picture source selects portrait
+artwork with a compact corner rank and vector suit above the covered portion;
+desktop seats place the larger cards beside the label. Both variants use native
+61:74 artwork, so ranks and suits are never stretched. The deck README records
+the font source and retained SIL Open Font License. Opponents
 show card backs during play and only the server-provided result hands at showdown.
-[ActionControls.tsx](../../frontend/src/ActionControls.tsx) owns the raise and stack
-forms. During the viewer's turn, a compact outlined row presents Call, Bet/Raise,
-Check, and Fold; unavailable actions are disabled. Outside their turn only the
-waiting status is shown. Bet/Raise opens a sizing panel with numeric and slider
+[ActionControls.tsx](../../frontend/src/ActionControls.tsx) owns the raise form and in-hand actions. Between hands it renders nothing;
+the table caption indicates automatic dealing or waiting for funded players. Stack
+editing stays in the viewer’s nameplate dialog. During the viewer's turn, a compact outlined row presents Call or Check,
+Bet/Raise, and Fold; unavailable actions are disabled. Outside their turn the
+controls render nothing and the table caption identifies the actor. Bet/Raise opens a sizing panel with numeric and slider
 inputs plus minimum, half-pot, pot, and all-in presets. Presets only select a draft;
 an explicit confirmation sends the raise. Cancel or Escape returns to the action
 row. Pot raises include the call and then a fraction of the pot after calling;
 presets are clamped to server limits, including short all-in raises. Opening bets
 are labelled Bet, while the wire command remains `raise`. The draft resets when the hand, street, actor,
 target, or maximum changes. Buttons disable while an action is pending or the
-connection is unavailable. Below 1024px, a header toggle opens chat/activity;
-chat/activity overlays the table on these narrower screens. The action row stays
-in the layout, while the raise editor opens above it over the table so opening it
-does not resize the table or create page scrolling.
+connection is unavailable. Below 1024px, a bottom-left toggle opens chat/activity above the table.
+The action row and raise editor overlay the bottom of the table without changing
+its dimensions. The raise editor is scrollable on short screens.
 [main.tsx](../../frontend/src/main.tsx) mounts the app. React stores the latest complete
 server snapshot alongside local form and connection state. Each new snapshot
 replaces the displayed game state and clears the pending action indicator.
@@ -53,6 +66,20 @@ There is no client-side game simulation or incremental event replay.
 The UI uses server-computed action limits to guide the player. The backend still
 validates every request. See the [connection module](connections.md) for messages
 and the [game module](game.md) for visibility rules.
+
+## All-in runout choice
+
+[RunoutChoice.tsx](../../frontend/src/RunoutChoice.tsx) displays a native modal over
+the table or Settings whenever the server offers runouts. Eligible players see
+Run once and Run twice buttons; other players see progress only. The dialog shows
+who has voted and the time remaining, and disables submissions after a vote,
+during a pending request, or without a connection. Escape does not dismiss an
+unresolved choice; the server's deadline ensures it cannot block play indefinitely.
+Closing after resolution restores native focus. The browser does not decide the
+outcome from its countdown. [Runouts.css](../../frontend/src/Runouts.css) owns the
+choice and result styling. [PokerTable.tsx](../../frontend/src/PokerTable.tsx) shows
+two labeled boards and each run's payouts after a two-run showdown; seat payouts
+show the aggregate award. Existing single-board results remain supported.
 
 ## Feedback
 
@@ -69,10 +96,11 @@ its trailing `/ws`) and does not join a seat or interrupt the game connection.
 ## Lobby settings
 
 [Settings.tsx](../../frontend/src/Settings.tsx) is a dedicated page opened from the
-header without dropping the connection. Any connected player can deal a hand when two players have chips, and save shared
-small/big blinds, cents mode, and auto-deal. The server snapshot is authoritative;
+Options menu without dropping the connection. Any connected player can save shared
+small/big blinds and cents mode. Dealing is always automatic, including the first hand;
+there is no manual deal button or auto-deal toggle. The server snapshot is authoritative;
 there is no browser-local settings preference. Denominations are locked during a
-hand; auto-deal can be switched off at any time. New shared settings reset open
+hand. New shared settings reset open
 drafts, and leaving the page discards unsaved changes.
 
 [amounts.ts](../../frontend/src/amounts.ts) formats amounts and converts numeric

@@ -3,10 +3,11 @@ import "./App.css";
 import type { State } from "./types";
 import { ActionControls, type Action } from "./ActionControls";
 import { PokerTable } from "./PokerTable";
+import { RunoutChoice } from "./RunoutChoice";
 
 import { Feedback } from "./Feedback";
+import { TableToolbar } from "./TableToolbar";
 import { Settings } from "./Settings";
-import { formatAmount } from "./amounts";
 
 const sessionKey = "headwins:global";
 
@@ -131,7 +132,11 @@ export default function App() {
 
   return (
     <main className={`app ${joined && state && !settingsOpen ? "app-table" : ""}`}>
-      <header>
+      {joined && state ? <TableToolbar name={me?.name || name} status={status} settingsOpen={settingsOpen}
+        settings={() => setSettingsOpen(!settingsOpen)} leave={() => {
+          setSettingsOpen(false); setJoined(false); setState(null); setStatus("Offline");
+          setPending(false); setError(""); sessionStorage.removeItem(`${sessionKey}:token`);
+        }} /> : <header>
         <div>
           <p className="eyebrow">PLAY MONEY • NO-LIMIT HOLD’EM</p>
           <h1>Headwins Poker</h1>
@@ -175,7 +180,7 @@ export default function App() {
           </button>
         </div>
         <Feedback name={me?.name || name} />
-      </header>
+      </header>}
       {error && (
         <div role="alert" className="error">
           {error}
@@ -227,18 +232,11 @@ export default function App() {
           </p>
         </section>
       ) : settingsOpen ? (
-        <Settings key={`${state.small_blind}:${state.big_blind}:${state.cents}:${state.auto_deal}:${state.running}`} state={state} ready={ready} send={send} back={() => setSettingsOpen(false)} />
+        <Settings key={`${state.small_blind}:${state.big_blind}:${state.cents}:${state.running}`} state={state} ready={ready} send={send} back={() => setSettingsOpen(false)} />
       ) : (
         <>
           <div className="game-layout">
             <section className="table-area" aria-label="Poker table">
-              <div className="table-heading">
-                <span>Hand #{state.hand_number}</span>
-                <strong>{state.street}</strong>
-                <span>
-                  Blinds {formatAmount(state.small_blind, state.cents)} / {formatAmount(state.big_blind, state.cents)}
-                </span>
-              </div>
               <PokerTable state={state} ready={ready} send={send} />
               <ActionControls key={`${state.hand_number}:${state.street}:${state.actor}:${state.target}:${state.max_raise_to}:${state.cents}`} state={state} ready={ready} send={send} />
             </section>
@@ -278,12 +276,10 @@ export default function App() {
               </form>
             </aside>
           </div>
-          <footer>
-            Connected as {me?.name} · Disconnecting folds a live hand unless
-            you’re all-in. Refreshing restores a retained seat. Play chips only.
-          </footer>
+          <button className="table-chat-toggle" aria-expanded={chatOpen} aria-controls="table-chat" onClick={() => setChatOpen(!chatOpen)}>{chatOpen ? "Close chat" : "Chat & log"}</button>
         </>
       )}
+      {joined && state?.runout_vote && <RunoutChoice key={state.runout_vote.hand_id} state={state} ready={ready} send={send} />}
     </main>
   );
 }

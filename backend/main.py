@@ -5,6 +5,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from game import Table, InvalidAction
 from storage import DynamoStore, StorageError, snapshot
@@ -22,9 +23,10 @@ async def lifespan(app):
     try:
         yield
     finally:
-        if server.deal_task:
-            server.deal_task.cancel()
-            await asyncio.gather(server.deal_task, return_exceptions=True)
+        tasks = [task for task in (server.deal_task, server.runout_task) if task]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -39,10 +41,31 @@ class GameServer:
     failed: bool = False
     deal_task: asyncio.Task | None = None
     auto_deal_delay: float = 5
+    runout_task: asyncio.Task | None = None
+
+    def schedule_runout(self):
+        vote = self.table.runout_vote
+        if self.failed or not vote:
+            if self.runout_task:
+                self.runout_task.cancel()
+                self.runout_task = None
+        elif self.runout_task is None:
+            self.runout_task = asyncio.create_task(self.finish_runout_vote(vote))
+
+    async def finish_runout_vote(self, vote):
+        try:
+            deadline = datetime.fromisoformat(vote["deadline"])
+            await asyncio.sleep(max(0, (deadline - datetime.now(timezone.utc)).total_seconds()))
+            async with self.lock:
+                self.runout_task = None
+                if not self.failed and self.table.runout_vote is vote:
+                    self.table.resolve_runouts(1, "timeout")
+                    await self.broadcast()
+        except StorageError:
+            pass
 
     def can_auto_deal(self):
-        return (not self.failed and self.table.auto_deal
-                and self.table.street == "complete"
+        return (not self.failed and not self.table.running
                 and sum(p.connected and p.stack > 0 for p in self.table.players) >= 2)
 
     def schedule_deal(self):
@@ -77,6 +100,8 @@ class GameServer:
                 )
             except Exception as exc:
                 self.failed = True
+                self.schedule_runout()
+                self.schedule_deal()
                 logging.error(
                     "Game persistence failed (%s); stopping play.", type(exc).__name__
                 )
@@ -148,6 +173,7 @@ class GameServer:
             await self.checkpoint()
 
         self.schedule_deal()
+        self.schedule_runout()
 
 
 server = GameServer()
@@ -213,6 +239,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         server.table.start(player.id)
                     elif kind in {"fold", "check_call", "raise"}:
                         server.table.act(player.id, kind, data.get("amount"))
+                    elif kind == "runout":
+                        server.table.choose_runouts(player.id, data.get("count"),
+                                                    data.get("hand_id"))
                     elif kind == "settings":
                         server.table.set_settings(player.id, data.get("small_blind"),
                                                   data.get("big_blind"), data.get("auto_deal"),

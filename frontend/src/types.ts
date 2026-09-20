@@ -22,7 +22,6 @@ export type State = {
   target: number;
   small_blind: number;
   big_blind: number;
-  auto_deal: boolean;
   cents: boolean;
   min_raise_to: number;
   max_raise_to: number;
@@ -30,8 +29,15 @@ export type State = {
   call_amount: number;
   hand_number: number;
   history: string[];
+  runout_vote: null | {
+    hand_id: string;
+    eligible: string[];
+    votes: Record<string, number>;
+    deadline: string;
+  };
   result: null | {
     payouts: Record<string, number>;
     hands: Record<string, string[]>;
+    runouts?: { board: string[]; payouts: Record<string, number>; pots: { amount: number; winners: string[]; runout: number }[] }[];
   };
 };

@@ -2,8 +2,8 @@
 
 Headwins Poker is a browser-based, play-money Texas Hold’em app for two to nine
 players at one shared table, with nine fixed seats and no host or privileged seat.
-Between hands, players can move to empty seats or remove another player. Anyone at the table can configure shared blinds, cents denominations, and automatic
-next-hand dealing from Settings. The browser shows the game and sends player actions;
+Between hands, players can move to empty seats or remove another player. Anyone at the table can configure shared blinds and cents denominations from Settings. Hands deal automatically
+after five seconds whenever at least two connected players have chips. The browser shows the game and sends player actions;
 the backend owns the rules, chips, and authoritative state.
 
 ## The system at a glance
@@ -45,6 +45,10 @@ database addresses and deployment-specific resource names belong in environment
 configuration, outside the architecture guide.
 
 ## How a turn reaches everyone
+
+When all-in betting closes before the river, remaining contenders choose one or
+two runouts. Two runs need unanimous consent; one vote for once, a disconnect or
+a timeout resolves to one. The engine splits each pot across agreed runouts.
 
 A player joins or reconnects to a seat. When they act, the connection layer passes
 the request to the game engine, which checks the rules and updates the table.

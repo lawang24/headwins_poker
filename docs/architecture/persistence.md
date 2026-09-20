@@ -19,9 +19,10 @@ The existing checkpoint table keeps its string partition key `pk=GAME#GLOBAL`,
 with increasing `version` and a compressed binary JSON `payload`. Schema 2 adds
 session/hand IDs, starting-hand data, and the event sequence to the existing
 players, chips, board, result, blinds, and recent display log. Shared cents and
-auto-deal settings are also saved, defaulting to false for older checkpoints.
+the legacy auto-deal flag are also saved. Cents defaults to false for older
+checkpoints; auto-deal always restores as true, regardless of its saved value.
 The pending auto-deal timer is transient and is recreated only when eligible
-players reconnect to a completed hand. The checkpoint remains bounded.
+players reconnect while no hand is running. The checkpoint remains bounded.
 
 The history table has string `pk` and `sk` keys. It has no secondary indexes,
 streams, or TTL. Events and summaries retain data indefinitely; profiles can
@@ -100,6 +101,13 @@ are never refunded or recorded twice. The recovery changes and archive records
 commit together before accepting connections; the next join opens a new session.
 Session end timestamps after a crash indicate when recovery detected closure,
 not an inferred crash time. Recovery still cancels rather than resumes a hand.
+
+Runout offers, choices and resolution reasons are saved as ordered private hand
+events. Completion records and the checkpoint result retain both boards and
+per-run awards along with aggregate net chips. Pending votes and their timer are
+transient: restart cancels the unfinished hand and refunds all contributions using
+the same recovery path as any other active hand. Older completed results without
+`runouts` still render as a single board.
 
 ## Privacy and analysis
 

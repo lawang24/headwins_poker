@@ -59,6 +59,9 @@ the [README](../../README.md#dynamodb-and-budget-alerts).
 ## Verification workflow
 
 [Engine tests](../../backend/tests/test_game.py) cover the game rules and privacy.
+[Runout tests](../../backend/tests/test_runouts.py) exercise unanimous consent,
+one-run fallback, timer cancellation, card integrity, side-pot accounting and
+restart/reconnect behavior.
 [API tests](../../backend/tests/test_api.py) exercise the WebSocket contract,
 sessions, invalid messages, and the single shared game using in-process clients.
 [Feedback tests](../../backend/tests/test_feedback.py) cover private persistence, reporter
@@ -97,6 +100,11 @@ overrides may be affected by zoom, so verify `innerWidth` and `innerHeight`.
 The PokerNow public tutorial supplies visual references but does not expose all
 live-game controls or mobile keyboard behavior; those require a live reference
 and device validation before claiming exact parity.
+
+The browser E2E runners extend the deal timer for deterministic seating and
+recovery scenarios and use the legacy start command at controlled boundaries.
+[Settings tests](../../backend/tests/test_settings.py) verify automatic first and
+subsequent deals, eligibility, cancellation, and persistence-failure guards.
 
 ## Keeping this guide current
 

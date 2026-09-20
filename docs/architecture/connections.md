@@ -38,11 +38,12 @@ All messages are JSON text over `/ws`. Clients join before sending game commands
 | Direction | Type | Payload and meaning |
 | --- | --- | --- |
 | Client → server | `join` | `name` and optional saved `token`; create or reclaim a seat. |
-| Client → server | `start` | Any connected player requests the next hand. |
+| Client → server | `start` | Legacy compatibility command to start a hand immediately; the current UI relies on automatic dealing. |
 | Client → server | `fold`, `check_call` | Act on the current turn. |
 | Client → server | `raise` | `amount` is the total commitment for this street. |
+| Client → server | `runout` | `count` is integer 1 or 2; `hand_id` must match the pending offer. Only connected contenders may vote, once per hand. |
 | Client → server | `set_stack` | `amount` sets the player’s stack between hands. |
-| Client → server | `settings` | Any joined player sets integer `small_blind`, `big_blind` and boolean `cents`, `auto_deal` for the lobby. |
+| Client → server | `settings` | Any joined player sets integer `small_blind`, `big_blind` and boolean `cents` for the lobby. Legacy `auto_deal` is optional and cannot disable dealing. |
 | Client → server | `move_seat` | `seat` is an integer 0–8; move to an empty seat between hands. |
 | Client → server | `kick` | `player_id` identifies another player to remove between hands. |
 | Client → server | `chat` | `text` contains 1–300 characters after trimming. |
@@ -55,21 +56,34 @@ the same lock as betting. Kicks save the removal before detaching and closing th
 target socket with `4002`, then broadcast the remaining table. A stale socket
 cannot send further commands or disconnect a replacement in its cleanup.
 
-Snapshots include shared `small_blind`, `big_blind`, `cents`, and `auto_deal`.
+Snapshots include shared `small_blind`, `big_blind`, `cents`, and a legacy
+`auto_deal` field that is always true.
 Settings requests validate all fields before mutation, and use the same lock,
 checkpoint, and broadcast path as game actions.
 
-The server owns one cancellable five-second auto-deal task after a completed
-hand, provided two connected players have chips. Ordinary broadcasts do not reset
-the delay. Disabling auto-deal, manually starting, or losing eligible players
-cancels it. Eligibility is rechecked under the game lock before dealing; the first
-hand remains manual. Server shutdown cancels the task, and persistence failure
-prevents further deals.
+The server owns one cancellable five-second deal task whenever no hand is running
+and at least two connected players have chips, including before the first hand.
+Ordinary broadcasts do not reset the delay. Starting a hand through the legacy
+command or losing eligible players cancels the timer. Eligibility is rechecked
+under the game lock before dealing. Server shutdown cancels the task, and
+persistence failure prevents further deals.
+
+Snapshots include nullable `runout_vote` with the hand ID, eligible player IDs,
+recorded votes, and a UTC deadline. A separate cancellable task in
+[GameServer](../../backend/main.py) resolves unanswered offers to one run under the
+game lock, then checkpoints and broadcasts the result. Ordinary broadcasts do not
+reset this deadline. Resolution, shutdown and storage failure cancel the task;
+late votes resolve to one run and stale hand IDs are rejected. A pending vote is
+still a running hand, so neither the next-deal timer nor between-hand commands can
+interrupt it. Replacement connections retain votes and the original deadline.
+Completed `result.runouts` contains the board, per-run payouts and pot layers for
+each run, while `result.payouts` remains the total (including refunds).
 
 ## Seat lifecycle
 
-A disconnected player with chips folds an active hand. An all-in player remains
-eligible for the pot. Reconnection does not undo a fold. Seats are retained during
+A disconnected player with chips folds while betting is open. An all-in player
+remains eligible for the pot. Once a runout choice is pending, disconnecting any
+contender resolves to one run without folding them, including a covering player. Reconnection does not undo a fold. Seats are retained during
 hands to preserve order; a new join between hands prunes disconnected seats.
 Pruning records a cash-out. A retained seat keeps its chips on reconnect; a pruned
 seat starts with 1,000 again under the same player ID, recorded as a new chip entry.

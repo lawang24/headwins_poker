@@ -33,9 +33,9 @@ class SettingsTests(unittest.TestCase):
                 with self.assertRaises(InvalidAction):
                     self.table.set_settings(self.b.id, sb, bb, auto, cents)
                 self.assertEqual((self.table.small_blind, self.table.big_blind,
-                                  self.table.auto_deal, self.table.cents), (5, 10, False, False))
+                                  self.table.auto_deal, self.table.cents), (5, 10, True, False))
 
-    def test_live_hand_only_allows_auto_deal_change(self):
+    def test_live_hand_rejects_denomination_changes(self):
         self.table.start(self.a.id)
         for values in [(25, 50, True, False), (5, 10, True, True)]:
             with self.assertRaises(InvalidAction):
@@ -50,10 +50,12 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((recovered.small_blind, recovered.big_blind,
                           recovered.auto_deal, recovered.cents), (25, 50, True, True))
         old = json.loads(saved)
+        old["auto_deal"] = False
+        self.assertTrue(restore(json.dumps(old)).auto_deal)
         del old["auto_deal"]
         del old["cents"]
         recovered = restore(json.dumps(old))
-        self.assertFalse(recovered.auto_deal)
+        self.assertTrue(recovered.auto_deal)
         self.assertFalse(recovered.cents)
 
 
@@ -62,7 +64,6 @@ class AutoDealTests(unittest.IsolatedAsyncioTestCase):
         self.server = GameServer(auto_deal_delay=.02)
         self.a = self.server.table.join("Alice")
         self.server.table.join("Bob")
-        self.server.table.auto_deal = True
 
     async def asyncTearDown(self):
         if self.server.deal_task:
@@ -74,10 +75,14 @@ class AutoDealTests(unittest.IsolatedAsyncioTestCase):
         self.server.table.act(self.server.table.actor, "fold")
         await self.server.broadcast()
 
-    async def test_first_hand_is_manual_and_result_is_visible_before_next_hand(self):
+    async def test_first_and_subsequent_hands_deal_automatically(self):
         await self.server.broadcast()
-        self.assertIsNone(self.server.deal_task)
-        await self.finish_hand()
+        self.assertIsNotNone(self.server.deal_task)
+        await asyncio.sleep(.05)
+        self.assertEqual(self.server.table.hand_number, 1)
+        self.assertTrue(self.server.table.running)
+        self.server.table.act(self.server.table.actor, "fold")
+        await self.server.broadcast()
         self.assertEqual(self.server.table.street, "complete")
         task = self.server.deal_task
         await self.server.broadcast()
@@ -86,12 +91,13 @@ class AutoDealTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.server.table.hand_number, 2)
         self.assertTrue(self.server.table.running)
 
-    async def test_disable_cancels_pending_deal(self):
+    async def test_legacy_setting_cannot_disable_automatic_dealing(self):
         await self.finish_hand()
-        self.server.table.auto_deal = False
+        self.server.table.set_settings(self.a.id, 5, 10, False, False)
         await self.server.broadcast()
         await asyncio.sleep(.05)
-        self.assertEqual(self.server.table.hand_number, 1)
+        self.assertEqual(self.server.table.hand_number, 2)
+        self.assertTrue(self.server.table.auto_deal)
 
     async def test_manual_deal_cancels_timer(self):
         await self.finish_hand()
@@ -111,3 +117,18 @@ class AutoDealTests(unittest.IsolatedAsyncioTestCase):
         await self.server.broadcast()
         await asyncio.sleep(.05)
         self.assertEqual(self.server.table.hand_number, 2)
+
+    async def test_insufficient_funded_players_pause_first_deal(self):
+        self.server.table.set_stack(self.a.id, 0)
+        await self.server.broadcast()
+        self.assertIsNone(self.server.deal_task)
+        self.server.table.set_stack(self.a.id, 1000)
+        await self.server.broadcast()
+        await asyncio.sleep(.05)
+        self.assertEqual(self.server.table.hand_number, 1)
+
+    async def test_failure_prevents_dealing(self):
+        await self.server.broadcast()
+        self.server.failed = True
+        await asyncio.sleep(.05)
+        self.assertEqual(self.server.table.hand_number, 0)

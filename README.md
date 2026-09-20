@@ -24,7 +24,7 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open http://127.0.0.1:5173/ in two separate browser profiles (or different browsers) and enter a name in each. Tabs in the same profile reuse one player identity. Everyone connects to the same global game. Any connected player can deal once two players have chips. The **Invite friends** button copies the app URL.
+Open http://127.0.0.1:5173/ in two separate browser profiles (or different browsers) and enter a name in each. Tabs in the same profile reuse one player identity. Everyone connects to the same global game. Hands deal automatically after five seconds once two connected players have chips. **Options → Invite friends** copies the app URL. Options also contains Settings, Leave, and table help.
 
 Vite proxies `/ws` to port 8000. To use another backend address, copy `frontend/.env.example` to `frontend/.env.development.local` and set `VITE_WS_URL` (for example, `ws://127.0.0.1:8001/ws`), then run Uvicorn on that port. A localhost invitation works only on the same machine; remote friends need a reachable hosted address.
 
@@ -44,12 +44,13 @@ at `http://127.0.0.1:8001/health`; Vite's default health proxy still targets 800
 
 ## Gameplay
 
-- Start with 1,000 play chips; blinds are 5/10. You can change your own stack between hands, including rebuying after losing your chips.
+- Start with 1,000 play chips; blinds are 5/10. Click your nameplate to change your own stack between hands, including rebuying after losing your chips.
 - The dealer rotates between eligible players. Heads-up, the dealer posts the small blind and acts first preflop, last postflop.
 - **Raise to** is the total committed on the current betting street. The server checks turns, minimum raises, available chips, and whether short all-ins reopen betting.
 - All-in players skip further actions. When no further betting is possible, the board runs out automatically. Main/side pots split by eligibility and hand rank; odd chips go clockwise starting left of the dealer. Uncalled excess is returned.
-- A completed hand stays visible for review. The host deals the next hand. There is no mid-hand restart.
-- New arrivals wait for the next hand. Disconnecting folds a player with chips; an all-in player remains eligible. Reload restores the same seat using its saved browser identity, but a hand already folded remains folded. Reconnecting the same token elsewhere replaces the old socket.
+- A completed hand stays visible for five seconds before the next automatic deal, provided two connected players have chips. There is no mid-hand restart.
+- When all-in betting closes before the river, everyone still in the hand chooses **Run once** or **Run twice**. Two runs require unanimous agreement within 20 seconds; one-run votes, timeouts, or a disconnected contender mean one run. Existing community cards are shared, each pot is split between runs, and both boards and awards appear at showdown.
+- New arrivals wait for the next hand. Disconnecting during betting folds a player with chips; during a runout choice it settles once without folding; an all-in player remains eligible. Reload restores the same seat using its saved browser identity, but a hand already folded remains folded. Reconnecting the same token elsewhere replaces the old socket.
 - Chat and the last 100 activity messages are shared by everyone at the table. Hole cards stay private until a contested showdown.
 
 ## DynamoDB and budget alerts
@@ -174,7 +175,9 @@ PYTHONPATH=.artifacts/e2e/deps backend/venv/bin/python backend/e2e/seating_test.
 ```
 
 It uses local ports 18800 and 15173, in-memory game state, and disposable Chrome
-profiles. It checks moving, reconnecting, kicking, live-hand restrictions, and
+profiles. The browser runners extend the automatic-deal delay to keep long setup
+and seating checks deterministic, and start hands through the legacy protocol.
+The backend settings tests cover the automatic first/next-hand timer. It checks moving, reconnecting, kicking, live-hand restrictions, and
 desktop/mobile layouts; screenshots go to `.artifacts/seating/`.
 
 ### Browser end-to-end tests

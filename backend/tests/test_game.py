@@ -92,9 +92,11 @@ class PokerTests(unittest.TestCase):
         self.assertEqual(self.total(t), 200)
         self.assertEqual(t.hand_number, 1)
 
-    def test_all_in_automatic_runout(self):
+    def test_all_in_offers_runout_choice(self):
         t = self.table((5, 8))
         t.start(t.players[0].id)
+        self.assertIsNotNone(t.runout_vote)
+        t.choose_runouts(t.players[0].id, 1, t.hand_id)
         self.assertEqual(t.street, "complete")
         self.assertEqual(len(t.board), 5)
         self.assertEqual(self.total(t), 13)
@@ -104,6 +106,7 @@ class PokerTests(unittest.TestCase):
         t.start(t.players[0].id)
         self.assertEqual(t.state(t.actor)["call_amount"], 3)
         t.act(t.actor, "check_call")
+        t.choose_runouts(t.players[0].id, 1, t.hand_id)
         self.assertEqual(t.street, "complete")
         self.assertEqual(self.total(t), 108)
         self.assertEqual(t.result["pots"][0]["amount"], 16)
@@ -237,6 +240,11 @@ class PokerTests(unittest.TestCase):
                 while t.running:
                     actions += 1
                     self.assertLess(actions, 250)
+                    if t.runout_vote:
+                        for pid in list(t.runout_vote["eligible"]):
+                            if t.runout_vote and pid not in t.runout_vote["votes"]:
+                                t.choose_runouts(pid, 2 if rng.random() < .75 else 1, t.hand_id)
+                        continue
                     state = t.state(t.actor)
                     choice = rng.random()
                     if choice < 0.15:

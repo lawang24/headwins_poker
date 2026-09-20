@@ -1,4 +1,5 @@
-// Rebuild the 52 approved, font-independent card images: node scripts/generate-cards.mjs
+// Rebuild desktop and portrait SVG faces: node scripts/generate-cards.mjs
+// Abril Fatface outlines: google/fonts (SIL OFL, see AbrilFatface-OFL.txt).
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const ranks = JSON.parse(readFileSync(new URL('./card-ranks.json', import.meta.url)));
@@ -15,16 +16,21 @@ for (const [suit, path] of Object.entries(suits)) {
   const color = ['hearts', 'diamonds'].includes(suit) ? '#df292e' : '#252525';
   for (const [rank, glyph] of Object.entries(ranks)) {
     const [x0, y0, x1, y1] = glyph.bounds;
-    // Consistent cap height; Q's tail extends below the shared baseline.
-    const scale = 106 / -y0;
-    const width = (x1 - x0) * scale;
-    const sx = Math.min(scale, 137 / (x1 - x0));
-    const tx = 42 - x0 * sx;
-    const ty = 49 - y0 * scale;
-    if (width <= 0 || (y1 - y0) * scale > 145) throw new Error(`Invalid rank: ${rank}`);
     const name = `${names[rank] || rank}_of_${suit}`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="250" height="350" viewBox="0 0 250 350"><title>${name.replaceAll('_', ' ')}</title><rect width="250" height="350" rx="12" fill="#fff"/><g fill="${color}"><path d="${glyph.path}" transform="matrix(${sx.toFixed(6)} 0 0 ${scale.toFixed(6)} ${tx.toFixed(3)} ${ty.toFixed(3)})"/><path d="${path}" transform="translate(103 180) scale(1.15)"/></g></svg>`;
-    writeFileSync(new URL(`${name}.svg`, destination), svg + '\n');
+    for (const mobile of [false, true]) {
+      // Native 61:74 geometry avoids distorting the rank when a hand is fanned.
+      // Portrait cards move the index into the exposed corner above the badge.
+      const capHeight = mobile ? 85 : 106;
+      const scale = capHeight / -y0;
+      const sx = Math.min(scale, (mobile ? 128 : 152) / (x1 - x0));
+      const tx = (mobile ? 16 : 42) - x0 * sx;
+      const ty = (mobile ? 20 : 56) - y0 * scale;
+      if (x1 <= x0 || (y1 - y0) * scale > 150) throw new Error(`Invalid rank: ${rank}`);
+      const corner = mobile ? `<path d="${path}" transform="translate(17 119) scale(.66)"/>` : '';
+      const suitPosition = mobile ? 'translate(118 185) scale(1.52)' : 'translate(133 192) scale(1.45)';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="305" height="370" viewBox="0 0 305 370"><title>${name.replaceAll('_', ' ')}</title><rect x="1" y="1" width="303" height="368" rx="21" fill="#fff" stroke="#e5e5e5" stroke-width="2"/><g fill="${color}"><path d="${glyph.path}" transform="matrix(${sx.toFixed(6)} 0 0 ${scale.toFixed(6)} ${tx.toFixed(3)} ${ty.toFixed(3)})"/>${corner}<path d="${path}" transform="${suitPosition}"/></g></svg>`;
+      writeFileSync(new URL(`${name}${mobile ? '-mobile' : ''}.svg`, destination), svg + '\n');
+    }
   }
 }
-console.log('Generated 52 clean card faces.');
+console.log('Generated 52 desktop and 52 portrait card faces.');
